@@ -193,7 +193,8 @@ my $log_dir  = "$OUTPUT/logs";
 mkdir($log_dir) unless (-d $log_dir);
 
 my $log_file = "$log_dir/typer.log";
-my $lfh = path($log_file)->filehandle(">");
+#my $lfh = path($log_file)->filehandle(">");
+open(my $lfh, ">", $log_file);
 
 print $lfh "|Started typer.pl "  .  localtime . "\n";
 
@@ -445,6 +446,7 @@ sub find_seed_alleles{
     
     foreach my $a (@headers){
 	if($a){
+	    $a =~ s/\s+$//;
 	    my ($allele,$number) = split(/\_/,$a);
 	    $seed_alleles->{$allele} = 1;
 	}
@@ -1188,7 +1190,7 @@ sub print_novel_schema{
     #Parse genome st hash to come up with numbers assoicated
     #with allele combinations
     my $st_fh = path("$outdir/novel_ST_all.out")->filehandle(">");
-    my $s_fh = path("$outdir/noel_schema.txt")->filehandle(">");
+    my $s_fh = path("$outdir/novel_schema.txt")->filehandle(">");
         
     #Print headers
     print $st_fh "Sample\tST\t" . join("\t", sort @$SEED_ALLELES) . "\n";
