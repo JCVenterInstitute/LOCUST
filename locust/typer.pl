@@ -631,7 +631,7 @@ sub clean_user_input{
 	}
     }
 
-    clean_identifiers($opts{input_file});
+    clean_identifiers($opts{input_file}) if ($opts{input_file});
 }
 sub clean_identifiers{
     my $file = shift;
