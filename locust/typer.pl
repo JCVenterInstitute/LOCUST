@@ -567,7 +567,6 @@ sub download_from_ncbi{
     #Cat all fasta list files together in one file
     my $output_file = "$OUTPUT/combined.list";
     my $fh = path($output_file)->filehandle(">");
-    open(my $fh,">", $output_file);
     &_cat($fh,\@fasta_files);
     $fh = "";
     
