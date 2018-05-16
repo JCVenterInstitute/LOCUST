@@ -54,7 +54,7 @@ B<--input_file, i>   : Input of sequence files (<genome identifier><\t><path to 
 
 B<--output, o>       : Directory to put output files in[Default: current working directory]
 
-B<--previous_output,p> : Direcotry to existing result files from a previous typer run. To be used with the increment flag.
+B<--previous_output,p> : Directory to existing result files from a previous typer run. To be used with the increment flag.
 
 B<--alleles, a>      : File of allele sequences
 
@@ -567,16 +567,19 @@ sub download_from_ncbi{
     #Cat all fasta list files together in one file
     my $output_file = "$OUTPUT/combined.list";
     my $fh = path($output_file)->filehandle(">");
+    open(my $fh,">", $output_file);
     &_cat($fh,\@fasta_files);
+    $fh = "";
     
     my $gb_list = "$OUTPUT/combined_gb.list";
     my $gfh = path($gb_list)->filehandle(">");
     &_cat($gfh, \@gb_files);
+
     
     if(-s $output_file){
 	return ($output_file,$gb_list);
     }else{
-	die( "ERROR: Problem download. No genome.list file created");
+	die( "ERROR: Problem download. No combined.list file created");
     }
 }
 
@@ -2031,7 +2034,7 @@ sub run_blastall{
     #the user specified the skip_blast option
     #Need to customize blast tabular output to include the query length and subject length as the final columns - first twelve columns remain the same
     unless((-s $output_blast && $opts{skip_blast}) || $new_alleles){
-
+    	
 	if(-s $fasta_file){
 
 	    my $cmd = $BLAST_CMD . " -task blastn -db $fasta_file -query $opts{seed_file} -outfmt \"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen\" -out $output_blast -qcov_hsp_perc 30 -max_target_seqs 5 -num_threads 4";
