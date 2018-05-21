@@ -70,10 +70,7 @@ while(<$fh>) {
 }
 close $fh;
 
-#my @headerArray;
-#foreach (split '\t', $full_st_array[0]){
-  #push @headerArray, $_;
-#}
+
 my %st_hash = create_st_hash(@full_st_array);
 my %color_hash =create_color_hash(%st_hash);
 my ($legend_shape_str, $legend_colors_str, $legend_labels_str) = create_legend_info(%color_hash);

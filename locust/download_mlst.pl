@@ -58,11 +58,11 @@ sub download_files{
   my ($found_hash) = @_;
   my $directory = "logs/";
   unless (-d $directory){mkdir $directory or die $!};
-  check_file_existence("logs/download_log.txt");
-  open (my $log_file, '>', "logs/download_log.txt");
+  check_file_existence("logs/download.log");
+  open (my $log_file, '>', "logs/download.log");
   my $tm = localtime;
   my ($day,$month,$year)=($tm->mday,($tm->mon + 1),($tm->year + 1900));
-  print $log_file "$month-$day-$year";
+  print $log_file "$month-$day-$year\n";
   #found_hash should have one key-- found species
   while( my ($species, $xml_hash) = each %$found_hash){
     my $urls = $xml_hash ->{"mlst"}->{"database"}->{"loci"}->{"locus"};

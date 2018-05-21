@@ -19,7 +19,7 @@ $|++;
 
 =head1 NAME
 
-typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic and Phenotypic Attributes. 
+typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic and Phenotypic Attributes.
 
 =head1 SYNOPSIS
 
@@ -46,7 +46,8 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --gb_list
                          --input_path
                          --multi_copy
-                         --help 
+												 --skip_itol
+												 --help
 
 =head1 OPTIONS
 
@@ -84,12 +85,12 @@ B<--accession_list>  : Provide a list of assembly accession IDs to be used as in
 
 B<--max_contigs>     : Omit genomes with more than this level of contigs.
 
-B<--min_N50>         :  Minimum N50 for download. 
+B<--min_N50>         :  Minimum N50 for download.
 
-B<--incrememnt>      : Flag given for adding current genome list to a past LOCUST run 
+B<--incrememnt>      : Flag given for adding current genome list to a past LOCUST run
 
 B<--previous_output> : Used with increment. Points to previous LOCUST run output file area.
-                                                                                                
+
 B<--original_input_file> : Used with increment. Previous LOCUST run input file.
 
 B<--hmm_model>      : Models of core hmm to limit results by
@@ -102,11 +103,13 @@ B<--input_path>      : Point to directory of fasta files
 
 B<--multi_copy>      : Flag to pull multi copy genes
 
+B<--skip_itol>			 : Skips making the itol annotation file
+
 B<--help, h>         : Display this help message.
 
 =head1  DESCRIPTION
 
-This program runs the JCVI LOCUST pipeline. A Custom Sequence Locus Typer for Classifying Microbial Genotypic and Phenotypic Attributes. 
+This program runs the JCVI LOCUST pipeline. A Custom Sequence Locus Typer for Classifying Microbial Genotypic and Phenotypic Attributes.
 
 =head1  INPUT
 
@@ -169,7 +172,7 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'org_search=s',
 	    'genome_type=s',
 	    'biosample_list=s',
-	    'accession_list=s',	   
+	    'accession_list=s',
 	    'max_contigs=i',
 	    'min_N50=i',
 	    'increment',
@@ -180,6 +183,7 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'gb_list=s',
 	    'input_path=s',
 	    'multi_copy',
+			'skip_itol',
 	    'help|h') || die "Error getting options! $!";
 
 
@@ -210,7 +214,7 @@ if($opts{original_input_file}){
 }
 
 map{$_ =~ s/\s+$//} @ORIG_GENOME_LIST;
-	  
+
 my $combined_input_file;
 
 #Save previous result files
@@ -234,25 +238,25 @@ unless ($opts{novel_schema}) {
 
 #Create/set input_file
 my ($input_file,$gb_list);
-if(($opts{org_search} || 
-    $opts{biosample_list} || 
-    $opts{accession_list}) && 
+if(($opts{org_search} ||
+    $opts{biosample_list} ||
+    $opts{accession_list}) &&
    !($opts{input_file})){
 
     #create input file from downloading from ncbi
     ($input_file,$gb_list) = download_from_ncbi($opts{org_search},
 				     $opts{biosample_list},
 				     $opts{accession_list});
-   
+
 }elsif($opts{input_path}){
-    
+
     #if given directory create input file
     $input_file = create_input_file($opts{input_path});
 
 }else{
     #default assignments/options
     $gb_list = $opts{gb_list};
-    $input_file = $opts{input_file};   
+    $input_file = $opts{input_file};
 }
 
 #If hmm parsing, run hmm search and modify input file to only
@@ -283,14 +287,14 @@ unless($opts{novel_schema}){
 if($opts{append_schema}){
     print $lfh "|Step: Creating appended schema\n";
     my $append_outdir = "$OUTPUT/appended_schema";
-    
+
     #Make append directory for out files
     mkdir($append_outdir);
-    
+
     #Open combined alleles file
     my $combined_alleles = "$append_outdir/appended_alleles.fa";
     my $cfh = path($combined_alleles)->filehandle(">");
-    
+
     my $nr_file = &clean_fasta_file($opts{alleles},$new_allele_fa,$append_outdir);
 
     #Combined new alleles with initial alleles
@@ -298,13 +302,13 @@ if($opts{append_schema}){
     push(@aa_files,$nr_file);
     push(@aa_files, $opts{alleles});
     &_cat($cfh,\@aa_files); #make one large combined allele file
-   
+
     #clean combined fasta file
     my $cmd = "$CLEAN_FASTA $combined_alleles";
     print $lfh "Running: $cmd\n";
     system($cmd) == 0 || die("ERROR: Problem running $cmd");
-   
-    unlink($combined_alleles . "_orig");    
+
+    unlink($combined_alleles . "_orig");
 
     #Run seq type with new alleles
     print $lfh "|Step: Run seq typer on new alleles\n";
@@ -314,16 +318,16 @@ if($opts{append_schema}){
     my $new_st_file = "$append_outdir/tmp_allele_ST.out";
     my $nst = path($new_st_file)->filehandle(">");
     &_cat($nst,$nst_files);
-        
+
     #Add new ST types to $opts{mlst_scheme}
     print $lfh "|Step: Added new sequene types to user inputed scheme\n";
     &make_new_schema($new_st_file,$opts{scheme},$append_outdir);
-    
+
 }elsif($opts{novel_schema}){
 
     print $lfh "|Step: Create novel files\n";
     &create_novel_files($fa_files);
-   
+
 }
 
 if($opts{tree}){
@@ -332,8 +336,12 @@ if($opts{tree}){
 
     &create_tree($opts{tree},$tree_input_file);
 }
- 
+
 #&remove_short_seq_stubs($top_seqs_files);
+
+unless($opts{skip_itol}){
+	&create_itol_file("$OUTPUT/ST_all.out");
+}
 
 &cleanup_files;
 
@@ -344,7 +352,7 @@ sub create_input_file{
     my $dir = shift;
 
     my $fh = path("$OUTPUT/directory.list")->filehandle(">");
-    
+
     if(-d $opts{input_path}){
 
 	my @files = glob("$opts{input_path}/*.fasta");
@@ -354,19 +362,19 @@ sub create_input_file{
 	    my $name = path($file)->basename('.fasta');
 	    print $fh "$name\t$file\n";
 	}
-	
+
     }else{
 	die("ERROR: $opts{input_path} doesn't exist");
     }
-       
+
     return("$OUTPUT/directory.list");
 }
 sub find_genome_files{
     my @list;
-    
+
     if(-d $opts{input_path}){
 	my @files = glob("$opts{input_path}/*.fasta");
-   
+
 	foreach(@files){
 	    my($name,$path,$suffix) = fileparse($_);
 	    my($pre,$post) = split(/\.fasta/,$name);
@@ -384,7 +392,7 @@ sub create_hmm_input_file{
     my $hfh = path($hmm_match)->filehandle("<");
     my $ifh = path($input_file)->filehandle("<");
     my $nfh = path("$OUTPUT/hmm_parsed_input_file.txt")->filehandle(">");
-    
+
     my $matched_hsh;
 
     while(<$hfh>){
@@ -393,7 +401,7 @@ sub create_hmm_input_file{
 
 	$matched_hsh->{$genome} = $perc;
     }
-   
+
     while(<$ifh>){
 	my ($genome, $location) = split(/\t/,$_);
 	$genome =~ s/\s+$//;
@@ -402,7 +410,7 @@ sub create_hmm_input_file{
     }
 
     return ("$OUTPUT/hmm_parsed_input_file.txt");
-    
+
 }
 sub run_hmm_search{
     my ($model, $cutoff,$gb_list) = @_;
@@ -416,7 +424,7 @@ sub run_hmm_search{
     my $cmd = "$prep_exe --gb_list $gb_list --output $OUTPUT";
 
     system($cmd) == 0 || die("ERROR: $cmd failed");
-    
+
     #Run core check
     if(-s "$OUTPUT/pep/pep.list"){
 	$cmd = "$core_exe --fasta_list $OUTPUT/pep/pep.list";
@@ -427,23 +435,23 @@ sub run_hmm_search{
     }else{
 	die("ERROR: Could not find pep.list file. Check that core_hmm_checker_prep.pl ran\n");
     }
-    
+
     #Need new input file with only matched genomes
     if(-s "$OUTPUT/hmm/hmm_matched.txt"){
 	return("$OUTPUT/hmm/hmm_matched.txt");
     }else{
 	die("ERROR: Could not find hmm_matched. Check that core_hmm_checker.pl ran\n");
     }
-    
+
 }
 sub find_seed_alleles{
 
     my $file = shift;
     my $seed_headers = `grep \">\" $file`;
-       
+
     my @headers = split(">",$seed_headers);
     my $seed_alleles;
-    
+
     foreach my $a (@headers){
 	if($a){
 	    $a =~ s/\s+$//;
@@ -464,23 +472,23 @@ sub combined_genome_lists{
     if($opts{increment}){
 	my $fh = path($combined_list)->filehandle(">");
 	my $in = path($current)->filehandle("<");
-		
+
 	foreach(<$in>){
 	    my $line  = $_;
 	    $line =~ s/\s+$//;
-	    
+
 	    print $fh "$line\n";
 	}
-	
+
 	map{print $fh "$_\n"} @$orig;
-	
+
     }
-    
+
     return $combined_list;
 }
 sub download_from_ncbi{
     print $lfh "|Step: Download sequence files from GenBank\n";
-    
+
     my ($org_search,$biosample,$accession)  = @_;
     my $exe = "perl $Bin/ftp_download_ncbi_annotation.pl";
 
@@ -500,10 +508,10 @@ sub download_from_ncbi{
 
     #Find existing assembly file if it's there
     my $assembly_files = glob("$OUTPUT/*assembly_summary.txt");
-    
+
     if($biosample){
 	my $cmd = $base_cmd . " --output_prefix biosample --biosample_list $biosample";
-	
+
 	if($assembly_files){
 	    #Use existing assembly file if it's there
 	    $cmd .= " --assembly_summary_file $assembly_files";
@@ -514,17 +522,17 @@ sub download_from_ncbi{
 
 	print $lfh "Running: $cmd\n";
 	system($cmd) == 0 || die("ERROR: Problem running $cmd");
-	
+
 	move("$OUTPUT/fasta.list","$OUTPUT/biosample.list");
 	push(@fasta_files,"$OUTPUT/biosample.list");
-	
+
 	move("$OUTPUT/gb.list","$OUTPUT/biosample.gb");
 	push(@gb_files, "$OUTPUT/biosample.gb");
     }
 
     if($accession){
 	my $cmd = $base_cmd . " --output_prefix accession --accession_list $accession";
-	
+
 	if($assembly_files){
 	    #Use existing assembly file if it's there
 	    $cmd .= " --assembly_summary_file $assembly_files";
@@ -532,10 +540,10 @@ sub download_from_ncbi{
 	    #Save assembly file to use later
 	    $cmd .= " --preserve_assembly_summary";
 	}
-    
+
 	print $lfh "Running: $cmd\n";
 	system($cmd) == 0 || die("ERROR: Problem running $cmd");
-	
+
 	move("$OUTPUT/fasta.list","$OUTPUT/accession.list");
 	push(@fasta_files,"$OUTPUT/accession.list");
 
@@ -545,7 +553,7 @@ sub download_from_ncbi{
 
     if($org_search){
 	my $cmd = $base_cmd . " --output_prefix org_search --organism_search_term \"$org_search\"";
-	
+
 	if($assembly_files){
 	    #Use existing assembly file if it's there
 	    $cmd .= " --assembly_summary_file $assembly_files";
@@ -556,7 +564,7 @@ sub download_from_ncbi{
 
 	print $lfh "Running: $cmd\n";
 	system($cmd) == 0 || die("ERROR: Problem running $cmd");
-	
+
 	move("$OUTPUT/fasta.list","$OUTPUT/org.list");
 	push(@fasta_files,"$OUTPUT/org.list");
 
@@ -569,12 +577,12 @@ sub download_from_ncbi{
     my $fh = path($output_file)->filehandle(">");
     &_cat($fh,\@fasta_files);
     $fh = "";
-    
+
     my $gb_list = "$OUTPUT/combined_gb.list";
     my $gfh = path($gb_list)->filehandle(">");
     &_cat($gfh, \@gb_files);
 
-    
+
     if(-s $output_file){
 	return ($output_file,$gb_list);
     }else{
@@ -587,29 +595,29 @@ sub clean_current_output_dir{
     print $lfh "|Step: Cleaning up output directory before incremental run\n";
 
     my $prev_dir = "$OUTPUT/previous_run";
-    
+
     #make directory to store previous run files in
     unless(-d $prev_dir){
 	print $lfh "|Step:Made $OUTPUT/previous_run directory\n";
 	mkdir($prev_dir);
     }
-    
+
     print $lfh "|Step: Copy existing out files to previous_run directory\n";
-    
+
     #Move existing combined.list file to another name
     my $combined_list_file = "$prev_dir/original_combined.list";
-    
+
     if(-s "$opts{previous_output}/combined.list"){
 	copy("$opts{previous_output}/combined.list", $combined_list_file);
     }else{
 	copy($opts{original_input_file}, "$prev_dir/original_input.list");
     }
-    
+
     move("$opts{previous_output}/ST_all.out", $prev_dir) if(-s "opts{previous_output}/ST_all.out");
     move("$opts{previous_output}/NOVEL_alleles.fa", $prev_dir) if(-s "$opts{previous_output}/NOVEL_alleles.fa");
     move("$opts{previous_output}/novel_schema" , "$prev_dir/novel_schema") if (-d "$opts{previous_output}/novel_schema");
     move("$opts{previous_output}/append_schema" , "$prev_dir/append_schema") if (-d "$opts{previous_output}/append_schema");
-    
+
     my @trees = glob("$opts{previous_output}/*tree*");
     foreach(@trees){
 	move($_, "$prev_dir");
@@ -640,7 +648,7 @@ sub clean_identifiers{
 
     my @lines = path($file)->lines;
     my @identifiers;
-    
+
     foreach(@lines){
 	my @values = split(/\t/,$_);
 
@@ -648,7 +656,8 @@ sub clean_identifiers{
 	unless($values[0] =~ /^([a-z]|[A-Z]|[0-9]|[_])*$/){
 	    push(@identifiers,$values[0]);
 	}
-    }
+}
+
 
     if(scalar @identifiers > 0){
 	print "ERROR: Identifiers can only contain alpha numeric characters and underscores. Please check the following in $file\n";
@@ -663,7 +672,7 @@ sub parse_config{
     print $lfh "|Step: Parsing config file\n";
     my $cfg = Config::IniFiles->new( -file => "$opts{config}" );
     my ($blastn,$makedb, $cleanfasta);
-    
+
     if($cfg->val('blast','blastn')){
 	$blastn = $cfg->val('blast','blastn');
     }else{
@@ -680,7 +689,7 @@ sub parse_config{
 }
 sub create_tree{
     print $lfh "|Step: Creating $opts{tree} tree\n";
-    
+
     my ($tree_type,$input_file) = @_;
 
     my $cmd = "perl $Bin/tree_builder.pl";
@@ -708,7 +717,7 @@ sub median{
 sub create_seed{
 
     print $lfh "|Step: Create seed file from allele file\n";
-    
+
     my $allele_file = shift;
     my $seed_file = "$OUTPUT/seeds_from_alleles.fa";
     my $output_blast = "$OUTPUT/alleles_vs_alleles.table";
@@ -717,7 +726,7 @@ sub create_seed{
     if (-s $seed_file && $opts{skip_blast}){
 	return $seed_file; #file already exists and --skip_blast means to not recreate it
     }
-	
+
     if (!(-s $output_blast && $opts{skip_blast})){ #file already exists and --skip_blast means to not recreate it
 	#Format fasta file into blast database
 	my $cmd = $FORMATDB_EXEC . " -input_type fasta -in $allele_file -dbtype nucl -logfile $logfile";
@@ -989,7 +998,7 @@ sub remove_short_seq_stubs{
 	link("$file.cleaned",$file);
 	unlink("$file.cleaned");
     }
-    
+
     return;
 }
 sub create_novel_files{
@@ -1017,14 +1026,14 @@ sub create_novel_files{
 	#and sequence if it is unique. Determine correct allele
 	#designation to assign
 	while(<$fh>){
-	    
+
 	    my $line = $_;
 	    $line =~ s/\s+$//;
-	    
+
 	    if($line =~ /^>/){
 
 		#Parse defline to determine allele name and reconfigure to correct format
-		my ($h,$temp_allele) = split(/>/,$line); 
+		my ($h,$temp_allele) = split(/>/,$line);
 		my @alleles = split(/\_/,$temp_allele, 2); #removes genome designation if appended to allele name
 
 		$c_allele = $alleles[0];
@@ -1035,75 +1044,75 @@ sub create_novel_files{
 
 		    #Remove all whitespace to make one string
 		    $current_sequence =~ s/\s+//g;
-		    
+
 		    if ($current_sequence  =~ /^SHORT/) {
-		    
+
 			#Store allele SHORT for this genome
 			$genome_st->{$genome}->{$p_allele} = "SHORT";
 
 		    }else{
-			
+
 			unless(exists $unique_sequences->{$current_sequence}->{$p_allele}){
-			    
+
 			    if(exists $allele_number->{$p_allele}){
 				$allele_number->{$p_allele}++;
 			    }else{
 				$allele_number->{$p_allele} = 1;
 			    }
-			    
+
 			    #Store new seq and assign next incremented allele number
 			    $unique_sequences->{$current_sequence}->{$p_allele} = "NOVEL" . $allele_number->{$p_allele};
 			}
-			
+
 			#Store allele number for this genome
 			$genome_st->{$genome}->{$p_allele} = $unique_sequences->{$current_sequence}->{$p_allele};
 
 		    }
-		    
+
 		    #reset current sequence and set current allele to previous allele
-		    $current_sequence = ""; 
+		    $current_sequence = "";
 		    $p_allele = $c_allele;
-		    
+
 		}
 	    }else{
-		
+
 		#collect all the sequence lines in one string
 		$current_sequence .= $line;
-		
+
 	    }
 	}
 
 	#Account for final sequence
 	if($current_sequence){
-	    
+
 	    #Remove all whitespace to make one string
 	    $current_sequence =~ s/\s+//g;
-	    
+
 	    if ($current_sequence  =~ /^SHORT/) {
-		
+
 		#Store allele SHORT for this genome
 		$genome_st->{$genome}->{$p_allele} = "SHORT";
-		
+
 	    }else{
 		unless(exists $unique_sequences->{$current_sequence}->{$p_allele}){
-		    
+
 		    if(exists $allele_number->{$p_allele}){
 			$allele_number->{$p_allele}++;
 		    }else{
 			$allele_number->{$p_allele} = 1;
 		    }
-		    
+
 		    #Store new seq and assign next incremented allele number
 		    $unique_sequences->{$current_sequence}->{$p_allele} = "NOVEL" . $allele_number->{$p_allele};
 		    #print "$p_allele:$allele_number->{$p_allele}\n";
-		    
+
 		}
-		
+
 		#Store allele number for this genome
 		$genome_st->{$genome}->{$p_allele} = $unique_sequences->{$current_sequence}->{$p_allele};
-		
+
 	    }
-	    
+
 	}
     }
 
@@ -1127,7 +1136,7 @@ sub print_novel_fasta{
     my $fh = path($file)->filehandle(">");
 
     foreach my $seq (keys %$sequences){
-	
+
 	foreach my $allele (keys %{$sequences->{$seq}}){
 	    if ($seq !~ /^SHORT/) {
 		my $header = "$allele" . "_" . "$sequences->{$seq}->{$allele}";
@@ -1145,7 +1154,7 @@ sub print_novel_fasta{
 	unlink($file . "_orig");
     }else{
 	print $lfh "|WARNING: The novel_alleles.fa file is of size zero\n";
-    }    
+    }
 }
 sub print_novel_schema{
 
@@ -1153,7 +1162,7 @@ sub print_novel_schema{
     my $ST;
     my $ST_number = 0;
     my $genome_alleles;
-    
+
     #Note: Both genome_names and alleles come in pre-sorted
     foreach my $genome (keys %$genome_st){
 	my $hsh = $genome_st->{$genome};
@@ -1162,7 +1171,7 @@ sub print_novel_schema{
 	#if not add MISSING
 	my @allele_numbers;
 	my $unknown = 0;
-	
+
 	foreach my $allele (sort @$SEED_ALLELES){
 	    if(defined $hsh->{$allele}){
 		push(@allele_numbers,$hsh->{$allele});
@@ -1174,10 +1183,10 @@ sub print_novel_schema{
 		$unknown = 1;
 	    }
 	}
-    	
+
 	my $allele_number_st = join("\t",@allele_numbers);
 	$genome_alleles->{$genome} = $allele_number_st;
-	
+
 	#Store ST combinations
 	unless(defined $ST->{$allele_number_st}){
 	    if ($unknown) {
@@ -1193,14 +1202,14 @@ sub print_novel_schema{
     #with allele combinations
     my $st_fh = path("$outdir/novel_ST_all.out")->filehandle(">");
     my $s_fh = path("$outdir/novel_schema.txt")->filehandle(">");
-        
+
     #Print headers
     print $st_fh "Sample\tST\t" . join("\t", sort @$SEED_ALLELES) . "\n";
     print $s_fh "ST\t" . join("\t", sort @$SEED_ALLELES). "\n";
 
-    #Print ST 
+    #Print ST
     foreach my $genome (@$genome_names){
-	
+
 	print $st_fh $genome . "\t";
 	print $st_fh $ST->{$genome_alleles->{$genome}} . "\t";
 	print $st_fh $genome_alleles->{$genome};
@@ -1213,7 +1222,7 @@ sub print_novel_schema{
 	    delete $ST->{$ST_key};
 	}
     }
-    
+
     #Print Schema
     foreach my $ST_key (sort {$ST->{$a} <=> $ST->{$b}} keys %$ST){
 	print $s_fh $ST->{$ST_key} . "\t" . $ST_key . "\n";
@@ -1225,25 +1234,25 @@ sub make_new_schema{
     my $max_st_num; #stores current max number
     my $schema; #stores all the new/orig ST types
     my $stAttributes; #store any columns that come after the schema
-    
+
     my $new_file =  "$outdir/appended_scheme.txt";
     my $final_st_file = "$outdir/append_allele_ST.out";
 
     my $new_fh = path($new_file)->filehandle(">");
     my $final_st_fh = path($final_st_file)->filehandle(">");
     my $orig_fh = path($orig_st)->filehandle("<");
-    
+
     #Determines the max ST Type Number found in
     #original file
     my ($ST_type_size,$ST_attr_size);
     my $header =1;
     my $unknown = "";
-   
+
     while(my $line = <$orig_fh>){
 	$line =~ s/\s+$//;
         my @data = split("\t",$line);
 	my $ST = shift(@data);       # Remove the first element (Sequence Type) from the line and store it.
-	
+
 	# If this line is the header, store the line's array, which is the ordered list of allele names, in allelesOrdered.
 	if ($header) {
 	    $header = 0;
@@ -1293,11 +1302,11 @@ sub make_new_schema{
 	    }
 	}
     }
-   
-    
+
+
     #Parses new ST types and stores in hash
     open(my $new_st_fh, "<", $new_st_file);
-    
+
     while(<$new_st_fh>){
 	unless($_ =~ /Sample/){
 	    chomp $_;
@@ -1331,7 +1340,7 @@ sub make_new_schema{
 	    }
 	}
     }
-   
+
     #Prints the new ST stypes to the new appended scheme
     foreach my $st_type (sort {$schema->{$a} <=> $schema->{$b}} keys %$schema){
 
@@ -1343,12 +1352,12 @@ sub make_new_schema{
 
 	print $new_fh "\n";
     }
-    
+
     close $new_st_fh;
 
     #Write new ST_out w/ new schema numbers
     open ($new_st_fh, "<", $new_st_file);
-    
+
     while(my $line = <$new_st_fh>){
 
 	chomp $line;
@@ -1358,7 +1367,7 @@ sub make_new_schema{
 	    (my $sample, my $st_num) = splice(@values,0,2);
 	    my $st_type = join("\t",@values[0 .. ($ST_type_size - 1)]);
 	    my $st_output = join("\t",@values);
-	    
+
 	    if (defined $schema->{$st_type}) {
 		$st_num = $schema->{$st_type};
 	    }
@@ -1378,7 +1387,7 @@ sub make_new_schema{
 
 sub run_seq_type{
     print $lfh "|Step: run sequence typer\n";
-    
+
     my ($input_file,$new_alleles) = @_;
     my %genomes_seen = ();
 
@@ -1398,11 +1407,11 @@ sub run_seq_type{
     my $header = 1;
 
     my $tfh = path("$OUTPUT/logs/tophits.log")->filehandle(">");;
-    
+
     foreach my $line (@lines){
 
 	chomp $line;
-    
+
 	if ($header) {#check if first line is a header
 
 	    if ($line =~ /^GENOME\tPATH/) {
@@ -1416,40 +1425,40 @@ sub run_seq_type{
 
 	}
 
-	#Make individual genome directory  
+	#Make individual genome directory
 	my @line_values = split(/\t/,$line,3);
 	my ($genome,$path,$genomeAttributes);
 
 	#Check that the correct values were in the input file and that formatting is correct
 	if(scalar @line_values < 2){
-	    
+
 	    print $lfh "ERROR: Formatting in $input_file is not correct. Parsing died at $line. Genome and path must be seperated by a tab.\n";
 	    print STDERR "ERROR: Formatting in $input_file is not correct.";
 	    print STDERR "Parsing died at $line. Genome and path must be seperated by a tab.\n";
 	    exit(1);
-	    
+
 	}else{
-	    
+
 	    $genome = $line_values[0];
 	    $path = $line_values[1];
 	    $genomeAttributes = $line_values[2] if $line_values[2];
-	
+
 	}
 
 	$genome =~ s/\s+$//; #removing trailing spaces
 	$path =~ s/\s+$//; #removing trailing spaces
 
 	if(exists $genomes_seen{$genome}){
-	   
+
 	    print STDERR "WARNING: a genome is allowed to occur only once in the genome list file - ignoring the second line.\n";
 	    print STDERR "$line\n$genomes_seen{$genome}\n";
-	    
+
 	    next;
-	    
+
 	}else{
-	    
+
 	    $genomes_seen{$genome} = $line;
-	
+
 	}
 
 	print $lfh "|INFO:Processing genome $genome\n";
@@ -1461,62 +1470,62 @@ sub run_seq_type{
 	    #Copy over genome sequences
 	    #Only copy over if given input list, ncbi downloads have no need to copy over
 	    copy_genome_sequences($path,$genome);
-	
+
 	}
-	
+
 	#Run blastall
 	my $blast_file = run_blastall($genome,$new_alleles); #for $new_alleles this is just used to return the file name
 
 	#Die if blast results were zero
 	unless(-s $blast_file){
-	
+
 	    print $lfh "|WARNING: Blast results for $genome where empty. Please check genome and remove from analysis if necessary\n";
 	    next;
-	    
+
 	}
 
 	#Run MLST Scripts
 	my $top_hits_file = run_top_hits($blast_file,$genome,$new_alleles,$tfh); #for $new_alleles this is just used to return the file name
 	my $top_seqs_file = run_pullseqs($top_hits_file,$genome,$new_alleles); #for $new_alleles this is just used to return the file name
-	
+
 	push(@top_seqs_files, $top_seqs_file);
 
 	my ($st_out,$fa_out);
-	
+
 	if($opts{novel_schema}){
-	
+
 	    push(@fa_files,$top_seqs_file);
 
 	}else{
-	    
+
 	    ($st_out,$fa_out) = run_st_finder($top_seqs_file, $genome, $new_alleles, \%stMap, \%alleleMap, \@allelesOrdered, \%stAttributes, $genomeAttributes, $genomeHeader) ;
 	    push(@fa_files,$fa_out);
 	    push(@st_files,$st_out);
-    	 
+
 	}
 
     }
 
     #Add previous genome's list output files
     if($opts{increment}){
-	
+
 	foreach (@ORIG_GENOME_LIST){
-	    
+
 	    my @values = split(/\t/,$_);
 
 	    if($opts{novel_schema}){
-	
+
 		push(@fa_files, "$opts{previous_output}/" . $values[0] . "/" . $values[0] . "_hits_top_seqs.fa");
-	    
+
 	    }else{
-	
+
 		push(@fa_files,"$opts{previous_output}/" . $values[0] . "/" . $values[0] . "_new.fa");
 		push(@st_files,"$opts{previous_output}/" . $values[0] . "/" . $values[0] . "_ST.out");
-	    
+
 	    }
-	    
+
 	}
-	
+
     }
 
     return(\@st_files,\@fa_files,\@top_seqs_files);
@@ -1532,43 +1541,43 @@ sub clean_fasta_file{
     my $ofh = path($old_alleles)->filehandle("<");
     my $nfh = path($new_alleles)->filehandle("<");
     my $nrfh = path($new_file)->filehandle(">");
-    
+
     while(<$ofh>){
 
 	my $line = $_;
 
 	if($line =~ /^>/){
-	
+
 	    my $allele = $line;
 	    $allele =~ s/^>//;
 	    $allele =~ s/\s.*//;
 	    $allele =~ s/\s+//;
 	    my ($gene,$identifier) = split(/\_/,$allele, 2);
-	    
+
 	    if($identifier =~ /^NOVEL\d+$/){
-	
+
 		$identifier =~ s/^NOVEL//;
-		
+
 		if(exists $allele_numbers->{$gene}){
-		
+
 		    if($identifier > $allele_numbers->{$gene}){
-		
+
 			$allele_numbers->{$gene} = $identifier;
-		    
+
 		    }
-		    
+
 		}else{
-		    
+
 		    $allele_numbers->{$gene} = $identifier;
-		
+
 		}
-	    
+
 	    }
-	
+
 	}
-    
+
     }
-        
+
     my $current_sequence;
     my $unique_sequences; #hsh ref of unique sequences of new alleles
     my ($p_allele,$c_allele);
@@ -1577,7 +1586,7 @@ sub clean_fasta_file{
 
 	my $line = $_;
 	$line =~ s/s+$//;
-	
+
 	if($line =~ /^>/){
 
 	    my ($h,$temp_allele) = split(/>/,$line); #split def line
@@ -1590,7 +1599,7 @@ sub clean_fasta_file{
 
 		#Removes newlines and other whiespace to make for one string
 		$current_sequence =~ s/\s+//g;
-		
+
 		unless (exists $unique_sequences->{$current_sequence}->{$p_allele}){
 
 		    if(exists $allele_numbers->{$p_allele}){
@@ -1619,12 +1628,12 @@ sub clean_fasta_file{
 	}
 
     }
-    
+
     #Account for final sequence
     if($current_sequence){
 
 	$current_sequence =~ s/\s+//g;
-	
+
 	unless(exists $unique_sequences->{$current_sequence}->{$p_allele}){
 
 	    if(exists $allele_numbers->{$p_allele}){
@@ -1662,7 +1671,7 @@ sub clean_fasta_file{
 
 sub init_st_finder{
     my($scheme_file, $alleles_file, $stMap, $alleleMap, $allelesOrdered, $stAttributes, $append) = @_;
-    
+
     # Parse through ST-schema file.
     my $stSchemaFile_fh = path($scheme_file)->filehandle("<");
     my $ST_type_size;
@@ -1670,12 +1679,12 @@ sub init_st_finder{
     my $alleles_seen_ST = {};
     my $alleles_seen_alleles = {};
     my $header =1;
-    
+
     while (my $line = <$stSchemaFile_fh>) {
 	chomp $line;
         my @data = split("\t",$line);
 	my $ST = shift(@data);       # Remove the first element (Sequence Type) from the line and store it.
-	
+
 	# If this line is the header, store the line's array, which is the ordered list of allele names, in allelesOrdered.
 	if ($header) {
 	    $header = 0;
@@ -1726,15 +1735,15 @@ sub init_st_finder{
 	    }
 	}
     }
-    
+
     close($stSchemaFile_fh);
 
     # Open Bio::SeqIO object for mlstAllelesFile.
     my $inMlstAlleles = Bio::SeqIO->new(-file => "<$alleles_file", -format => "fasta",);
-    
+
     # Parse through the MLST alleles and create the allele mapping.
     while (my $mlstAllele = $inMlstAlleles->next_seq) {
-	
+
 	my($allele,$id) = split(/\_/,$mlstAllele->primary_id,2);
 	$alleleMap->{lc($mlstAllele->seq)}->{$allele} = $id;
 
@@ -1763,7 +1772,7 @@ sub init_st_finder{
 	    }
 	}
     }
-    
+
     return;
 }
 sub run_st_finder{
@@ -1784,12 +1793,12 @@ sub run_st_finder{
 
 	$new_alleles_fh = path($new_alleles_file)->filehandle(">");
     }
-    
+
     # Open filehandle for output file.
     my $output_fh = path($outputfile)->filehandle(">");
-  
+
     print $output_fh "Sample\tST\t".join("\t", @{$allelesOrdered});
-    
+
     if (keys %{ $stAttributes }) {
 	print $output_fh "\t$stAttributes->{'HEADER'}";
     }
@@ -1797,18 +1806,18 @@ sub run_st_finder{
 	print $output_fh "\t$genomeHeader";
     }
     print $output_fh "\n";
-    
-    # Open Bio::SeqIO object for top_seqs_file. 
+
+    # Open Bio::SeqIO object for top_seqs_file.
     my $inQueries = Bio::SeqIO->new(-file => "<$top_seqs_file", -format => "fasta",);
 
-    # Parse through the query. 
+    # Parse through the query.
     while (my $query = $inQueries->next_seq) {
 	my $queryName = $query->primary_id;                      # Query name.
 	my $querySeq = $query->seq;                              # Query sequence.
 
 	#Split name to get queryAllele
 	my($queryAllele,$scheme) = split(/\_/,$queryName,2);
-       
+
 	$allelesFound{$queryAllele}{$queryName} = "NEW";
 	$query_sequences{$queryName} = $querySeq;
 
@@ -1819,13 +1828,13 @@ sub run_st_finder{
 
 	    #Note: Different alleles COULD have the same sequence
 	    foreach my $mlstAlleleName(keys $alleleMap->{lc($querySeq)}){
-	    
-		#If the query allele is a member of the MLST allele 
-		#(i.e. the query allele name forms the beginning of the MLST allele name), 
+
+		#If the query allele is a member of the MLST allele
+		#(i.e. the query allele name forms the beginning of the MLST allele name),
 		#it is a proper match.
 		if ($mlstAlleleName eq $queryAllele) {
 		    $allelesFound{$queryAllele}{$queryName} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
-		} 
+		}
 	    }
 	}
     }
@@ -1834,19 +1843,19 @@ sub run_st_finder{
     my @multi_variants;
     my @base_string;
     my %locations;
-    
+
     #Stores alleles with multi variants
     #Creates base string, with the alleles that do not have variants
     #Variants will be 'plugged' in later
     my $location_count = 0;
 
     foreach my $key (@$allelesOrdered){
-	
+
 	$locations{$key} = $location_count;
 	$location_count++;
 
 	my @v;
-	
+
 	if(exists $allelesFound{$key}){
 	    @v = keys $allelesFound{$key};
 	}else{
@@ -1854,12 +1863,12 @@ sub run_st_finder{
 	}
 
 	my $count = scalar (@v);
-       
+
 	if($count > 1){
 	    push(@multi_variants,\@v);
 	    push(@base_string,"");
 	}else{
-	   
+
 	    if(@v){
 		my $schema_num = $allelesFound{$key}{$v[0]};
 		push(@base_string,$schema_num);
@@ -1873,10 +1882,10 @@ sub run_st_finder{
     push @variants, clone(\@base_string);
 
     foreach my $gene(@multi_variants){
-		
+
 	my($base_allele,$gene_schema) = split(/_/,$gene->[0]);
 	my $values_to_add = scalar(@variants);
-	
+
 	my $size = scalar(@$gene);
 	grow_variants( \@variants, $size );
 
@@ -1884,28 +1893,28 @@ sub run_st_finder{
 
 	my $values_added = 0;
 	my $index = 0;  #increment this until it's time to move on.
-	
+
 	for my $allele ( @$gene ) {
 
 	    #Split allele name to only store scheme number
 	    my($a,$s) = split(/_/,$allele);
 	    my $allele_schema = $allelesFound{$base_allele}{$allele};
-	    
+
 	    while ( $values_added < $values_to_add ) {
-		# Fill the location for allele at this entry	
+		# Fill the location for allele at this entry
 		$variants[$index][$allele_index] = $allele_schema;
-	       
+
 		# then increment both index and values_added
 		$index++;
 		$values_added++;
 	    }
-	   
+
 	    $values_added = 0; # reset values added between alleles.
-	    
+
 	}
 
     }
-    
+
     # stKey - tab-delimited string of allelesFound in order of allelesOrdered.
     my $stKey = "";
 
@@ -1923,7 +1932,7 @@ sub run_st_finder{
 	    }
 	}
     }
-    
+
     # If the stKey exists in stMap, print both ST found and stKey to output file.
     foreach my $combo (@variants){
 
@@ -1934,42 +1943,42 @@ sub run_st_finder{
 
 	    $ST = $stMap->{$stKey};
 	}
-	
+
 	# Otherwise, print "UNKNOWN" and stKey to output file.
 	# Note: this will happen if any of the alleles in stKey are SHORT or NEW.
 	else {
 	    $ST = "UNKNOWN";
 	}
-			 
-	
+
+
 	print $output_fh "$identifier\t$ST\t$stKey";
-	
+
 	if (keys %{ $stAttributes }) {
 	    print $output_fh "\t$stAttributes->{$ST}";
 	}
-	
+
 	if ($genomeAttributes) {
 	    print $output_fh "\t$genomeAttributes";
 	}
-	
+
 	print $output_fh "\n";
     }
-    
+
     return($outputfile,$new_alleles_file);
 }
 sub grow_variants {
 
     my ( $variants, $size ) = @_;
 
-    # Make a local copy of 1 'unit', being the current @variants array. 
-    # This allows us to add arbitrary number of copies to itself.  
+    # Make a local copy of 1 'unit', being the current @variants array.
+    # This allows us to add arbitrary number of copies to itself.
     # Also, we need to make sure these aren't copies of the same reference, or we'll be
     # overwriting the same locations when making our fills, so we'll use Clone.pm
     # to make 'deep copies'. However, we also need to make sure to clone the entries in the
     # copy, or, again, we'll be accessing the same location when making different fills... yeesh.
     my $copy = clone($variants);
 
-    while ( $size > 1 ) { 
+    while ( $size > 1 ) {
 	# Needs to be 1, not 0, since we're starting with 1 copy of @variants in @variants.
 
 	for my $entry ( @$copy ) {
@@ -1984,7 +1993,7 @@ sub run_pullseqs{
     my ($top_hits,$genome,$new_alleles) = @_;
 
     my $file = "$OUTPUT/$genome/$genome" . "_hits_top_seqs.fa";
-    
+
     my $cmd = "perl $Bin/pullseqs.pl";
     $cmd .= " -fastafile $OUTPUT/$genome/$genome.fasta";
     $cmd .= " -blastfile $top_hits";
@@ -1995,14 +2004,14 @@ sub run_pullseqs{
 	print $lfh "Running: $cmd\n";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
     }
-    
+
     return($file);
 }
 sub run_top_hits{
     my ($blast,$genome,$new_alleles,$log_file) = @_;
 
     my $file = "$OUTPUT/$genome/$genome" . "_hits_top.txt";
-    
+
     my $cmd = "perl $Bin/tophits.pl";
     $cmd .= " $blast";
     $cmd .= " multi_copy" if $opts{multi_copy};
@@ -2014,18 +2023,18 @@ sub run_top_hits{
 	print $lfh "Running: $cmd\n";
 
 	capture_merged{
-	    
+
 	    system($cmd) == 0 || die("ERROR running tophits!", __LINE__);
 
 	} stdout => $log_file;
     }
-   
+
     return ($file);
 
 }
 sub run_blastall{
     my ($genome,$new_alleles) = @_;
-    
+
     my $fasta_file = "$OUTPUT/$genome/$genome.fasta";
     my $output_blast = "$OUTPUT/$genome/$genome" . "_hits.txt";
 
@@ -2033,7 +2042,7 @@ sub run_blastall{
     #the user specified the skip_blast option
     #Need to customize blast tabular output to include the query length and subject length as the final columns - first twelve columns remain the same
     unless((-s $output_blast && $opts{skip_blast}) || $new_alleles){
-    	
+
 	if(-s $fasta_file){
 
 	    my $cmd = $BLAST_CMD . " -task blastn -db $fasta_file -query $opts{seed_file} -outfmt \"6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen slen\" -out $output_blast -qcov_hsp_perc 30 -max_target_seqs 5 -num_threads 4";
@@ -2042,7 +2051,7 @@ sub run_blastall{
 
 	}else{
 
-	    print $lfh "WARNING: $fasta_file is size zero or doesn't exist so no blast could 
+	    print $lfh "WARNING: $fasta_file is size zero or doesn't exist so no blast could
 be run\n";
 
 	}
@@ -2055,7 +2064,7 @@ be run\n";
 sub make_directory{
     my $genome = shift;
     my $dir = "$OUTPUT/$genome";
-	
+
     mkdir($dir) unless (-d $dir);
     die("ERROR: Error creating $dir\n") unless (-d $dir);
 }
@@ -2069,31 +2078,40 @@ sub copy_genome_sequences{
     my $genome_dir = "$OUTPUT/$genome/";
     my $fasta = "$genome.fasta";
     my $logfile = "$OUTPUT/$genome/makeblastdb.log";
-        
-    #Only copy file if it doesn't exist 
+
+    #Only copy file if it doesn't exist
     if($opts{input_file} || $opts{input_path}){
-	
+
 	if(-s $location){
 	    copy($location,"$genome_dir/$fasta");
 	}else{
 	    print $lfh "|WARNING: $genome_dir/$fasta is size zero, did not copy\n";
 	}
-	 
+
     }else{
 	my $dir = "$OUTPUT/$genome/$fasta";
-	
+
 	#move sequence from ncbi download area
 	move($dir,"$OUTPUT/$genome/") or die "Move failed: $!";
     }
-  
+
     if(-s "$genome_dir/$fasta"){
-	
+
 	#Format fasta file into blast database
 	my $cmd = $FORMATDB_EXEC . " -input_type fasta -in $genome_dir/$fasta -dbtype nucl -logfile $logfile";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
 
     }
-    
+
+}
+
+sub create_itol_file{
+	my $typer_file = shift;
+	my $cmd = "perl $Bin/create_itol.pl";
+	$cmd .= " --input_file $typer_file";
+	print $lfh "|Step: Creating ITOL Annotation file.";
+	print $lfh "Running $cmd\n";
+	system($cmd) == 0 || die("ERROR: $cmd failed");
 }
 
 sub _trim{
@@ -2110,7 +2128,7 @@ sub cleanup_files{
     my $download_dir = "$OUTPUT/logs/download";
 
     #make log file and move all logs to there
-  
+
     mkdir($download_dir) unless (-d $download_dir);
 
     #move download files
@@ -2154,7 +2172,7 @@ sub check_params{
     }else{
         $error .= "ERROR: Could not find valid config file in current working directory. Please provide one using --config\n";
     }
-    
+
     if($opts{input_file}){
 	if ($opts{input_file} !~ /^\//) {
 	    $opts{input_file} = "$START_CWD/$opts{input_file}";
@@ -2169,7 +2187,7 @@ sub check_params{
     }
 
     if($opts{seed_file}){
-	
+
 	if ($opts{seed_file} !~ /^\//) {
 	    $opts{seed_file} = "$START_CWD/$opts{seed_file}";
 	}
@@ -2186,7 +2204,7 @@ sub check_params{
     }else{
 	$error .= "ERROR: Option --scheme/-m is required, unless doing --novel_schema\n" unless($opts{novel_schema});
     }
-	
+
     if($opts{alleles}){
 	if ($opts{alleles} !~ /^\//) {
 	    $opts{alleles} = "$START_CWD/$opts{alleles}";
@@ -2203,18 +2221,18 @@ sub check_params{
     if($opts{tree}){
 
 	$error .= "ERROR: the arugment value '$opts{tree}' for tree option is not valid. The valid entries are 'raxml' or 'fasttree'\n" unless(lc($opts{tree}) eq 'raxml' || lc($opts{tree}) eq 'fasttree');
-	
+
     }
 
     if($opts{genome_type}){
 
 	$error .= "ERROR: the argument value '$opts{genome_type}' for genome_type is not valid. The valid entries are 'cg' or 'wgs'\n" unless(lc($opts{genome_type}) eq 'cg' || lc($opts{genome_type}) eq 'wgs');
     }
-       
+
     my $output;
-    
+
     if($opts{output}){
-	
+
 	if(-d $opts{output}){
 	    $output = $opts{output};
 	}else{
@@ -2238,7 +2256,7 @@ sub check_params{
 	    $error .= "When using --increment, user must provide --previous_output\n";
 	}
     }
-    
+
 
     if($opts{increment}){
 	if($opts{original_input_file}){
@@ -2251,47 +2269,47 @@ sub check_params{
     if($opts{hmm_model}){
 	$error .= "ERROR:$opts{hmm_model} does not exist or is size zero\n" unless(-s $opts{hmm_model});
     }
-    
+
     if($error){
 	die($error);
     }else{
 	return($output);
     }
-	    
+
 }
 sub _cat {
     # Given a list of file names, concatonate the first through n minus one-th
     # onto the nth.
-    
+
     my ( $output_fh, $input ) = ( @_ );
     my $print_header = 0;
 
     for ( @$input ) {
 
 	my $file = $_;
-	
+
 	if(-s $file){
 
 	    my $ifh = path($file)->filehandle("<");
-	    
-	    while ( <$ifh> ) { 
+
+	    while ( <$ifh> ) {
 
 		my $line = $_;
-		
+
 		if($line =~ /^Sample/){
-		
+
 		    print $output_fh $line unless($print_header);
 		    $print_header = 1;
-		
+
 		}else{
-		
+
 		    print $output_fh $line;
-		
+
 		}
 	    }
-	    
+
 	}
-	
+
     }
 
 }
@@ -2299,16 +2317,16 @@ sub _cat {
 sub _cat_fa_files {
     # Given a list of file names, concatonate the first through n minus one-th
     # onto the nth.
-    
+
     my ( $output_fh, $input ) = ( @_ );
     my $print_header = 0;
-    
+
     for ( @$input ) {
 	if(-s $_){
 
 	    my $ifh = path($_)->filehandle("<");
-	 
-	    while ( <$ifh> ) { 
+
+	    while ( <$ifh> ) {
 		if($_ =~ /Sample/){
 		    print $output_fh $_ unless($print_header);
 		    $print_header = 1;
