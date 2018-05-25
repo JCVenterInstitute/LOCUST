@@ -141,6 +141,9 @@ sub create_legend_info{
 
 sub write_itol_file{
 	my ($st_hash, $color_hash, $legend_shape_str, $legend_colors_str, $legend_labels_str) = @_;
+	if ($legend_colors_str eq ""){
+		die "No results."
+	}
 	my $outfile = "ITOL_ST_ANNOTATION.txt";
 	open (my $oh, '>', $outfile) or die "Couldn't open the outfile: $outfile";
 	print $oh "DATASET_COLORSTRIP\n";

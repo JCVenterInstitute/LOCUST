@@ -255,7 +255,7 @@ sub parse_xml_file{
       foreach my $entry (@found_entries){
         print "\n$entry";
       }
-      die "More than 1 MLST Profile matched your species of interest. Please choose one of the above.\n"
+      die "\nMore than 1 MLST Profile matched your species of interest. Please choose one of the above.\n"
     }
     elsif (scalar @found_entries eq 0) {
       die "\nYou didn't match any MLST profile name. Check your spelling. Otherwise, check here for available schema's: https://pubmlst.org/data/\n"

@@ -167,6 +167,8 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'blast_length=s',
 	    'append_schema',
 	    'novel_schema',
+			'download_schema=s',
+			"schema_alleles=i",
 	    'config|c=s',
 	    'tree|t=s',
 	    'org_search=s',
@@ -195,6 +197,19 @@ $OUTPUT = &check_params;
 #create type log file
 my $log_dir  = "$OUTPUT/logs";
 mkdir($log_dir) unless (-d $log_dir);
+
+#Download Alleles and Schema from PubMLST
+if ($opts{download_schema}){
+	my $search_term = $opts{download_schema};
+	my $num_of_schema_alleles = $opts{schema_alleles};
+	my $cmd = "perl $Bin/download_mlst.pl";
+	$cmd .= " -o '$search_term'";
+	if ($num_of_schema_alleles){
+		$cmd.= " -l $num_of_schema_alleles";
+	}
+	system($cmd) == 0 || die "\n";
+	($opts{alleles}, $opts{scheme}) = get_downloaded_schema_and_alleles($OUTPUT, $START_CWD);
+}
 
 my $log_file = "$log_dir/typer.log";
 #my $lfh = path($log_file)->filehandle(">");
@@ -294,7 +309,7 @@ if($opts{append_schema}){
     #Open combined alleles file
     my $combined_alleles = "$append_outdir/appended_alleles.fa";
     my $cfh = path($combined_alleles)->filehandle(">");
-
+		print $combined_alleles;
     my $nr_file = &clean_fasta_file($opts{alleles},$new_allele_fa,$append_outdir);
 
     #Combined new alleles with initial alleles
@@ -386,6 +401,27 @@ sub find_genome_files{
 
     return \@list;
 }
+
+sub get_downloaded_schema_and_alleles{
+	my $allele_file, my $schema_file = "";
+	my($output_dir) = @_;
+	my $download_log_file = "$output_dir/logs/download.log";
+	print "$download_log_file\n";
+	open(my $dlf, "<", $download_log_file) || die "ERROR: Cannot open $download_log_file.\n";
+	while(<$dlf>){
+		chomp;
+		my $line = $_;
+		if ($line =~ /^MLST Profile/){
+			my ($line_prefix, $downloaded_species) = split /: /, $line;
+			chomp $downloaded_species;
+			$allele_file = $downloaded_species . "_alleles.fa";
+			$schema_file = $downloaded_species . "_schema.txt";
+		}
+	}
+	close($dlf);
+	return ($allele_file, $schema_file);
+}
+
 sub create_hmm_input_file{
     my($hmm_match,$input_file) = @_;
 
@@ -2196,7 +2232,8 @@ sub check_params{
 	$error .= "ERROR: Option --seed_file is required when using the --incrememnt option\n";
     }
 
-    if($opts{scheme}){
+	unless($opts{download_schema}){
+	if($opts{scheme}){
 	if ($opts{scheme} !~ /^\//) {
 	    $opts{scheme} = "$START_CWD/$opts{scheme}";
 	}
@@ -2213,6 +2250,7 @@ sub check_params{
     }else{
 	$error .= "ERROR: Option --alleles/-a is required, unless doing --novel_schema\n" unless($opts{novel_schema});
     }
+	}
 
     if($opts{novel_schema} && $opts{append_schema}){
 	$error .= "ERROR: Can only use either --novel_schema OR --append_schema. Can not use both options\n";
