@@ -71,6 +71,10 @@ B<--appened_schema>  ; Option to extend schema with new alleles found in initial
 
 B<--novel_schema>    : Creates a novel scheme
 
+B<--download_schema>	: Download Schema and Alleles from PubMLST. Provide an organism to search for.
+
+B<--schema_alleles>	  : The number of alleles in the downloaded schema.
+
 B<--tree, t>         : Type of tree building. Options: raxml,fasttree
 
 B<--config, c>       : Config file to point to locally installed third party tools
