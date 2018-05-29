@@ -30,6 +30,8 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --skip_blast
                          --append_schema
                          --novel_schema
+                         --download_schema
+                         --schema_alleles
                          --tree <type of tree>
                          --config <config file>
                          --org_search
@@ -46,8 +48,8 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --gb_list
                          --input_path
                          --multi_copy
-												 --skip_itol
-												 --help
+                         --skip_itol
+                         --help
 
 =head1 OPTIONS
 
@@ -67,7 +69,7 @@ B<--skip_blast>      : Skips blast if the files are already generated
 
 B<--blast_length>    : Number of nucleotides on either end of the blast match that can not match the query allele and still be used [Default: 5]
 
-B<--appened_schema>  ; Option to extend schema with new alleles found in initial first run
+B<--append_schema>  ; Option to extend schema with new alleles found in initial first run
 
 B<--novel_schema>    : Creates a novel scheme
 
