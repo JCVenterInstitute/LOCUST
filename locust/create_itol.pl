@@ -71,18 +71,54 @@ while(<$fh>) {
 close $fh;
 
 
-my %st_hash = create_st_hash(@full_st_array);
-my %color_hash =create_color_hash(%st_hash);
-my ($legend_shape_str, $legend_colors_str, $legend_labels_str) = create_legend_info(%color_hash);
-write_itol_file(%st_hash, %color_hash, $legend_shape_str, $legend_colors_str, $legend_labels_str);
+my ($st_hash, $clonal_hash, $species_hash) = create_st_hash(@full_st_array);
+
+my $st_colors = create_color_hash(%$st_hash);
+my $clonal_colors = create_color_hash(%$clonal_hash);
+my $species_colors = create_color_hash(%$species_hash);
+
+my ($st_shape_str, $st_colors_str, $st_labels_str) = create_legend_info(%$st_colors);
+my ($clonal_shape_str, $clonal_colors_str, $clonal_labels_str) = create_legend_info(%$clonal_colors);
+my ($species_shape_str, $species_colors_str, $species_labels_str) = create_legend_info(%$species_colors);
+
+write_itol_file(\%$st_hash, \%$st_colors, $st_shape_str, $st_colors_str, $st_labels_str, "itol_ST.txt");
+write_itol_file(\%$clonal_hash, \%$clonal_colors, $clonal_shape_str, $clonal_colors_str, $clonal_labels_str, "itol_clonal_complex.txt");
+write_itol_file(\%$species_hash, \%$species_colors, $species_shape_str, $species_colors_str, $species_labels_str, "itol_species.txt");
 
 sub create_st_hash{
 	my @full_st_array = @_;
-	my %st_hash;
+	my %st_hash, my %clonal_hash, my %species_hash, my $clonal_column, my $species_column;
+	my @header = split("\t", $full_st_array[0]);
+	for (my $i = 0; $i < scalar @header; $i++){
+		if ($header[$i] eq "clonal_complex"){
+			$clonal_column = $i;
+		}
+		if ($header[$i] eq "species"){
+			$species_column = $i;
+		}
+	}
 	for (my $i = 1; $i <  scalar @full_st_array; $i++){
 	my @row = split "\t", $full_st_array[$i];
+
 	my $genome = $row[0];
 	my $ST_CALL = $row[1];
+
+	if ($species_column){
+		my $species = $row[$species_column];
+		if ($species){
+			$species_hash{$genome} = $species;
+		} else {
+				$species_hash{$genome} = "";
+		}
+}
+	if ($clonal_column){
+		my $clonal_complex = $row[$clonal_column];
+		if ($clonal_complex){
+			$clonal_hash{$genome} = $clonal_complex;
+		} else {
+			$clonal_hash{$genome} = "";
+		}
+}
 	my $row_length = scalar @row;
 	my @allele_designations = @row[2 .. $row_length];
 	#Captures any NEW allele calls-- immediately designates ST as new
@@ -100,28 +136,29 @@ sub create_st_hash{
 
 	$st_hash{$genome} = $ST_CALL;
 	}
-	return %st_hash;
+
+	return (\%st_hash, \%clonal_hash, \%species_hash);
 }
 
 sub create_color_hash{
 	my %st_hash = @_;
 	my %color_hash;
 	my $count = 0;
-	for my $st (values %st_hash){
-	if ($color_hash{$st}){
+	foreach (values %st_hash){
+	if ($color_hash{$_}){
 		next;
 	}
 	else{
 		if ($count < scalar @color_palette){
-			$color_hash{$st} = $color_palette[$count];
+			$color_hash{$_} = $color_palette[$count];
 		}
 		else {
-			$color_hash{$st} = $color_palette[$count % scalar @color_palette];
+			$color_hash{$_} = $color_palette[$count % scalar @color_palette];
 		}
 	}
 	$count ++;
 	}
-	return %color_hash;
+	return \%color_hash;
 	}
 
 sub create_legend_info{
@@ -140,26 +177,31 @@ sub create_legend_info{
 }
 
 sub write_itol_file{
-	my ($st_hash, $color_hash, $legend_shape_str, $legend_colors_str, $legend_labels_str) = @_;
-	if ($legend_colors_str eq ""){
-		die "No results."
-	}
-	my $outfile = "ITOL_ST_ANNOTATION.txt";
-	open (my $oh, '>', $outfile) or die "Couldn't open the outfile: $outfile";
-	print $oh "DATASET_COLORSTRIP\n";
-	print $oh "SEPERATOR TAB\n";
-	print $oh "DATASET_LABEL\tSequence Type\n";
-	print $oh "LEGEND_TITLE\tSequence Type\n";
-	print $oh "LEGEND_SHAPES\t$legend_shape_str\n";
-	print $oh "LEGEND_COLORS\t$legend_colors_str\n";
-	print $oh "LEGEND_LABELS\t$legend_labels_str\n";
-	print $oh "COLOR\t#ff0000\n";
-	print $oh "DATA\n";
-	while (my ($key, $value) = each (%st_hash)){
-		print $oh "$key\t$color_hash{$value}\t$value\n";
-	}
-	close $oh;
-		if (scalar @color_palette <= keys %color_hash){
-	print "Warning: There are less available colors than there are Sequence Types. Colors will be repeated.\n"
-	}
+	my ($st_hash, $color_hash, $legend_shape_str, $legend_colors_str, $legend_labels_str, $filename) = @_;
+	my %st_hash = %$st_hash;
+	my %color_hash = %$color_hash;
+	unless ($legend_labels_str eq ""){
+		open (my $oh, '>', $filename) or die "Couldn't open the outfile: $filename";
+		print $oh "DATASET_COLORSTRIP\n";
+		print $oh "SEPERATOR TAB\n";
+		print $oh "DATASET_LABEL\tSequence Type\n";
+		print $oh "LEGEND_TITLE\tSequence Type\n";
+		print $oh "LEGEND_SHAPES\t$legend_shape_str\n";
+		print $oh "LEGEND_COLORS\t$legend_colors_str\n";
+		print $oh "LEGEND_LABELS\t$legend_labels_str\n";
+		print $oh "COLOR\t#ff0000\n";
+		print $oh "DATA\n";
+		while (my ($key, $value) = each (%st_hash)){
+			print $oh "$key\t$color_hash{$value}\t$value\n";
+		}
+		close $oh;
+			if (scalar @color_palette <= keys %color_hash){
+				print "Warning: There are less available colors than there are Sequence Types. Colors will be repeated.\n"
+			}
+		} else {
+			open (my $oh, ">", $filename) or die "Couldn't open the outfile: $filename";
+			print "No results were found to add to $filename.\n";
+			print $oh "No results were found.";
+			close $oh;
+		}
 }
