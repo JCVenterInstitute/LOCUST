@@ -1,8 +1,9 @@
 #!/usr/bin/env perl
-#Copy (C) 2016 The J. Craig Venter Institute (JCVI).  All rights reserved
 
+#Copy (C) 2016 The J. Craig Venter Institute (JCVI).  All rights reserved
+  
 #This program is free software: you can redistribute it and/or modify
-#it under the terms of the GNU General Public License as published by
+#is under the terms of the GNU General Public License as published by
 #the Free Software Foundation, either version 3 of the License, or
 #(at your option) any later version.
 
@@ -13,6 +14,7 @@
 
 #You should have received a copy of the GNU General Public License
 #along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 use warnings;
 use strict;
 $|++;
@@ -38,9 +40,9 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --genome_type <cg/wgs>
                          --max_contigs
                          --min_N50
-                         --increment
                          --previous_output
                          --original_input_file
+                         --retype
                          --hmm_model
                          --hmm_cutoff
                          --gb_list
@@ -54,7 +56,7 @@ B<--input_file, i>   : Input of sequence files (<genome identifier><\t><path to 
 
 B<--output, o>       : Directory to put output files in[Default: current working directory]
 
-B<--previous_output,p> : Directory to existing result files from a previous typer run. To be used with the increment flag.
+B<--previous_output,p> : Directory to existing result files from a previous typer run.
 
 B<--alleles, a>      : File of allele sequences
 
@@ -86,11 +88,11 @@ B<--max_contigs>     : Omit genomes with more than this level of contigs.
 
 B<--min_N50>         :  Minimum N50 for download. 
 
-B<--incrememnt>      : Flag given for adding current genome list to a past LOCUST run 
-
 B<--previous_output> : Used with increment. Points to previous LOCUST run output file area.
                                                                                                 
 B<--original_input_file> : Used with increment. Previous LOCUST run input file.
+
+B<--retype>         : Will re-run typer on previous genomes, for incremental mode
 
 B<--hmm_model>      : Models of core hmm to limit results by
 
@@ -150,6 +152,7 @@ my %opts;
 
 #GLOBAL VARS
 my $OUTPUT;
+my $ORIG_DIR;
 my $START_CWD = cwd;
 my $CLEAN_FASTA = "perl $Bin/cleanFasta";
 my @ORIG_GENOME_LIST;
@@ -172,9 +175,9 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'accession_list=s',	   
 	    'max_contigs=i',
 	    'min_N50=i',
-	    'increment',
 	    'previous_output|p=s',
 	    'original_input_file=s',
+	    'retype',
 	    'hmm_model=s',
 	    'hmm_cutoff=i',
 	    'gb_list=s',
@@ -186,7 +189,7 @@ GetOptions( \%opts, 'input_file|i=s',
 pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 
 #Check input params and set output directory
-$OUTPUT = &check_params;
+($OUTPUT,$ORIG_DIR) = &check_params;
 
 #create type log file
 my $log_dir  = "$OUTPUT/logs";
@@ -198,7 +201,7 @@ open(my $lfh, ">", $log_file);
 
 print $lfh "|Started typer.pl "  .  localtime . "\n";
 
-#Open config file and assign parameters
+#Open config file and assgin parameters
 my($BLAST_CMD,$FORMATDB_EXEC) = parse_config($opts{config});
 
 #Clean user input files to ensure proper formating
@@ -214,7 +217,7 @@ map{$_ =~ s/\s+$//} @ORIG_GENOME_LIST;
 my $combined_input_file;
 
 #Save previous result files
-&clean_current_output_dir if ($opts{increment});
+&clean_current_output_dir if($opts{original_input_file});
 
 #create seed file if not provided and requested and not already present
 $opts{seed_file} = create_seed($opts{alleles}) unless ($opts{seed_file});
@@ -264,10 +267,16 @@ if($opts{hmm_model}){
     $input_file = create_hmm_input_file($hmm_passed,$input_file);
 }
 
-my $increment_combined_list = &combined_genome_lists($input_file,\@ORIG_GENOME_LIST,$hmm_passed);
+my $increment_combined_list = &combined_genome_lists($input_file,\@ORIG_GENOME_LIST);
 
 #Run seq type with input file
-my($st_files,$fa_files,$top_seqs_files) = run_seq_type($input_file);
+my($st_files,$fa_files,$top_seqs_files);
+
+if($opts{retype}){
+    ($st_files,$fa_files,$top_seqs_files) = run_seq_type($increment_combined_list);
+}else{
+    ($st_files,$fa_files,$top_seqs_files) = run_seq_type($input_file);
+}
 
 #Cat all output files from each genome to into final output
 unless($opts{novel_schema}){
@@ -328,7 +337,7 @@ if($opts{append_schema}){
 
 if($opts{tree}){
     my $tree_input_file;
-    $opts{increment} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
+    $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
 
     &create_tree($opts{tree},$tree_input_file);
 }
@@ -457,27 +466,26 @@ sub find_seed_alleles{
 
     return \@seeds;
 }
+
 sub combined_genome_lists{
     my ($current,$orig) = @_;
     my $combined_list = "$OUTPUT/increment_combined.list";
-
-    if($opts{increment}){
-	my $fh = path($combined_list)->filehandle(">");
-	my $in = path($current)->filehandle("<");
-		
-	foreach(<$in>){
-	    my $line  = $_;
-	    $line =~ s/\s+$//;
-	    
-	    print $fh "$line\n";
-	}
-	
-	map{print $fh "$_\n"} @$orig;
-	
-    }
+  
+    my $fh = path($combined_list)->filehandle(">");
+    my $in = path($current)->filehandle("<");
     
+    foreach(<$in>){
+	my $line  = $_;
+	$line =~ s/\s+$//;
+	
+	print $fh "$line\n";
+    }
+	
+    map{print $fh "$_\n"} @$orig;
+	
     return $combined_list;
 }
+
 sub download_from_ncbi{
     print $lfh "|Step: Download sequence files from GenBank\n";
     
@@ -587,7 +595,8 @@ sub clean_current_output_dir{
     print $lfh "|Step: Cleaning up output directory before incremental run\n";
 
     my $prev_dir = "$OUTPUT/previous_run";
-    
+    my $orig_dir = $ORIG_DIR;
+
     #make directory to store previous run files in
     unless(-d $prev_dir){
 	print $lfh "|Step:Made $OUTPUT/previous_run directory\n";
@@ -599,18 +608,18 @@ sub clean_current_output_dir{
     #Move existing combined.list file to another name
     my $combined_list_file = "$prev_dir/original_combined.list";
     
-    if(-s "$opts{previous_output}/combined.list"){
-	copy("$opts{previous_output}/combined.list", $combined_list_file);
+    if(-s "$orig_dir/combined.list"){
+	copy("$orig_dir/combined.list", $combined_list_file);
     }else{
 	copy($opts{original_input_file}, "$prev_dir/original_input.list");
     }
     
-    move("$opts{previous_output}/ST_all.out", $prev_dir) if(-s "opts{previous_output}/ST_all.out");
-    move("$opts{previous_output}/NOVEL_alleles.fa", $prev_dir) if(-s "$opts{previous_output}/NOVEL_alleles.fa");
-    move("$opts{previous_output}/novel_schema" , "$prev_dir/novel_schema") if (-d "$opts{previous_output}/novel_schema");
-    move("$opts{previous_output}/append_schema" , "$prev_dir/append_schema") if (-d "$opts{previous_output}/append_schema");
+    move("$orig_dir/ST_all.out", $prev_dir) if(-s "$orig_dir/ST_all.out");
+    move("$orig_dir/NOVEL_alleles.fa", $prev_dir) if(-s "$orig_dir/NOVEL_alleles.fa");
+    move("$orig_dir/novel_schema" , "$prev_dir/novel_schema") if (-d "$orig_dir/novel_schema");
+    move("$orig_dir/append_schema" , "$prev_dir/append_schema") if (-d "$orig_dir/append_schema");
     
-    my @trees = glob("$opts{previous_output}/*tree*");
+    my @trees = glob("$orig_dir/*tree*");
     foreach(@trees){
 	move($_, "$prev_dir");
     }
@@ -1497,26 +1506,29 @@ sub run_seq_type{
 
     }
 
+    
     #Add previous genome's list output files
-    if($opts{increment}){
-	
-	foreach (@ORIG_GENOME_LIST){
+    unless($opts{retype}){
+	if($opts{original_input_file}){
 	    
-	    my @values = split(/\t/,$_);
-
-	    if($opts{novel_schema}){
-	
-		push(@fa_files, "$opts{previous_output}/" . $values[0] . "/" . $values[0] . "_hits_top_seqs.fa");
-	    
-	    }else{
-	
-		push(@fa_files,"$opts{previous_output}/" . $values[0] . "/" . $values[0] . "_new.fa");
-		push(@st_files,"$opts{previous_output}/" . $values[0] . "/" . $values[0] . "_ST.out");
-	    
+	    foreach (@ORIG_GENOME_LIST){
+		
+		my @values = split(/\t/,$_);
+		
+		if($opts{novel_schema}){
+		    
+		    push(@fa_files, "$ORIG_DIR/" . $values[0] . "/" . $values[0] . "_hits_top_seqs.fa");
+		    
+		}else{
+		    
+		    push(@fa_files,"$ORIG_DIR/" . $values[0] . "/" . $values[0] . "_new.fa");
+		    push(@st_files,"$ORIG_DIR/" . $values[0] . "/" . $values[0] . "_ST.out");
+		    
+		}
+		
 	    }
 	    
 	}
-	
     }
 
     return(\@st_files,\@fa_files,\@top_seqs_files);
@@ -2069,29 +2081,20 @@ sub copy_genome_sequences{
     my $genome_dir = "$OUTPUT/$genome/";
     my $fasta = "$genome.fasta";
     my $logfile = "$OUTPUT/$genome/makeblastdb.log";
-        
-    #Only copy file if it doesn't exist 
+
+    #Create sym link to fasta file if not downloaded
     if($opts{input_file} || $opts{input_path}){
-	
-	if(-s $location){
-	    copy($location,"$genome_dir/$fasta");
-	}else{
-	    print $lfh "|WARNING: $genome_dir/$fasta is size zero, did not copy\n";
-	}
-	 
+	symlink($location,"$OUTPUT/$genome/$fasta");
     }else{
-	my $dir = "$OUTPUT/$genome/$fasta";
-	
-	#move sequence from ncbi download area
-	move($dir,"$OUTPUT/$genome/") or die "Move failed: $!";
+	$location = "$OUTPUT/$genome/$fasta";
     }
   
-    if(-s "$genome_dir/$fasta"){
+    if(-s $location){
 	
 	#Format fasta file into blast database
-	my $cmd = $FORMATDB_EXEC . " -input_type fasta -in $genome_dir/$fasta -dbtype nucl -logfile $logfile";
+	my $cmd = $FORMATDB_EXEC . " -input_type fasta -in $location -dbtype nucl -logfile $logfile -out $genome_dir/$fasta";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
-
+ 
     }
     
 }
@@ -2231,23 +2234,20 @@ sub check_params{
     }
 
 
-    if($opts{increment}){
-	if($opts{previous_output}){
-	    $output = $START_CWD;
-	}else{
-	    $error .= "When using --increment, user must provide --previous_output\n";
-	}
+    if($opts{previous_output}){
+	$output = $START_CWD;
     }
     
-
-    if($opts{increment}){
+    if($opts{previous_output}){
 	if($opts{original_input_file}){
 	    $error .= "$opts{original_input_file} does not exist or is size zero\n" unless(-s $opts{original_input_file});
 	}else{
-	    $error .= "Must provide --original_input_file if using --increment\n";
+	    $error .= "Must provide --original_input_file if using --previous_output\n";
 	}
     }
 
+    my $orig_dir = $opts{previous_output} // $START_CWD;
+    
     if($opts{hmm_model}){
 	$error .= "ERROR:$opts{hmm_model} does not exist or is size zero\n" unless(-s $opts{hmm_model});
     }
@@ -2255,7 +2255,7 @@ sub check_params{
     if($error){
 	die($error);
     }else{
-	return($output);
+	return($output,$orig_dir);
     }
 	    
 }
