@@ -232,7 +232,9 @@ sub get_xml_file{
 
   my $res = $ua->request($req);
   my $xmlContent = $res->content;
+
   return $xmlContent;
+
 }
 
 sub parse_xml_file{
@@ -286,7 +288,6 @@ sub make_concatenate_allele_file{
   }
   close CAT_ALLELE_FILE;
   }
-
 
 
 
