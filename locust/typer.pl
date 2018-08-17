@@ -176,8 +176,8 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'blast_length=s',
 	    'append_schema',
 	    'novel_schema',
-			'download_schema=s',
-			"schema_alleles=i",
+            'download_schema=s',
+	    'schema_alleles=i',
 	    'config|c=s',
 	    'tree|t=s',
 	    'org_search=s',
@@ -1335,7 +1335,7 @@ sub make_new_schema{
 	    }
 	    my $size = scalar @data;
 	    if (($size != ($ST_type_size + $ST_attr_size)) && ($size != $ST_type_size)) {
-		die "ERROR: ST$ST does not have the same number of columns as the header line or the alleles only: $size versus $ST_type_size alleles and $ST_attr_size attributes.\n";
+		die "ERROR: ST $ST does not have the same number of columns as the header line or the alleles only: $size versus $ST_type_size alleles and $ST_attr_size attributes.\n";
 	    }
 	    my $st_type = join("\t",@data[0 .. ($ST_type_size - 1)]);
 	    unless(exists $schema->{$st_type}){
@@ -2135,7 +2135,8 @@ sub copy_genome_sequences{
 
     #Create sym link to fasta file if not downloaded
     if($opts{input_file} || $opts{input_path}){
-	symlink($location,"$OUTPUT/$genome/$fasta");
+	my $real_path = path($location)->realpath;
+	symlink($real_path,"$OUTPUT/$genome/$fasta");
     }else{
 	$location = "$OUTPUT/$genome/$fasta";
     }
