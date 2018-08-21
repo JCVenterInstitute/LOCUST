@@ -206,26 +206,28 @@ pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 #create type log file
 my $log_dir  = "$OUTPUT/logs";
 mkdir($log_dir) unless (-d $log_dir);
-
+my $log_file = "$log_dir/typer.log";
+open(my $lfh, ">", $log_file);
+print $lfh "|Started typer.pl "  .  localtime . "\n";
 #Download Alleles and Schema from PubMLST
 if ($opts{download_schema}){
+	if ($opts{seed_file} or $opts{alleles} or $opts{scheme}){
+		print "Cannot use --download_schema option if giving seed file, alleles or schema.\n";
+		print $lfh "ERROR: Cannot use --download_schema option if giving seed file, alleles or schema.\n";
+		exit();
+	} else {
 	my $search_term = $opts{download_schema};
 	my $num_of_schema_alleles = $opts{schema_alleles};
 	my $cmd = "perl $Bin/download_mlst.pl";
 	$cmd .= " -o '$search_term'";
 	if ($num_of_schema_alleles){
 		$cmd.= " -l $num_of_schema_alleles";
-	}
+		}
 	system($cmd) == 0 || die "\n";
 	($opts{alleles}, $opts{scheme}) = get_downloaded_schema_and_alleles($OUTPUT, $START_CWD);
-}
-
-my $log_file = "$log_dir/typer.log";
+	}
+} 
 #my $lfh = path($log_file)->filehandle(">");
-open(my $lfh, ">", $log_file);
-
-print $lfh "|Started typer.pl "  .  localtime . "\n";
-
 #Open config file and assgin parameters
 my($BLAST_CMD,$FORMATDB_EXEC) = parse_config($opts{config});
 
@@ -370,7 +372,11 @@ if($opts{tree}){
 #&remove_short_seq_stubs($top_seqs_files);
 
 unless($opts{skip_itol}){
+	if ($opts{novel_schema}){
+			&create_itol_file("$OUTPUT/novel_schema/novel_ST_all.out");
+	}	else{
 	&create_itol_file("$OUTPUT/ST_all.out");
+	}
 }
 
 &cleanup_files;
@@ -768,7 +774,6 @@ sub median{
 sub create_seed{
 
     print $lfh "|Step: Create seed file from allele file\n";
-
     my $allele_file = shift;
     my $seed_file = "$OUTPUT/seeds_from_alleles.fa";
     my $output_blast = "$OUTPUT/alleles_vs_alleles.table";
@@ -2155,7 +2160,7 @@ sub create_itol_file{
 	my $typer_file = shift;
 	my $cmd = "perl $Bin/create_itol.pl";
 	$cmd .= " --input_file $typer_file";
-	print $lfh "|Step: Creating ITOL Annotation file.";
+	print $lfh "|Step: Creating ITOL Annotation file.\n";
 	print $lfh "Running $cmd\n";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
 }
