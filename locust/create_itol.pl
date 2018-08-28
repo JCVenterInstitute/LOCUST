@@ -135,7 +135,7 @@ sub create_st_hash{
 		$ST_CALL = "new";
 	}
 	#Captures Short or Missing allele calls-- immediately designates ST as unknown
-	if ("SHORT" ~~ @allele_designations || "MISSING" ~~ @allele_designations){
+	if ("SHORT" ~~ @allele_designations || "MISSING" ~~ @allele_designations || "TRUNC" ~~ @allele_designations){
 		$ST_CALL = "unknown";
 	}
 	#Captures those with all alleles called but unknown to ST schema file. All UNKNOWN ST's should have been removed already except for these.

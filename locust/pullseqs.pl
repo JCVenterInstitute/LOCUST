@@ -42,7 +42,7 @@ User must supply three command line parameters. First, the ".1con" file for the 
 
 =head1  OUTPUT
 
-Script outputs a multifasta file of the loci found in the genome. 
+Script outputs a multifasta file of the loci found in the genome.
 
 =head1  CONTACT
 
@@ -117,7 +117,7 @@ while (<INFILE>) {
 
     chomp $_;
     my $line = $_;
-	
+
     #print "Processing: $line\n";
     print LOGFILE "Processing: $line\n";
 
@@ -129,28 +129,27 @@ while (<INFILE>) {
 	my $perc_matched = $querymatchedlength / $tokens[12];
 	my $difference = $tokens[12] - $querymatchedlength;
 	my $short = 0; #true if we cannot retrieve a full length sequence
-	
 	#need to get query length form blast because we use the same name for multiple queries and so can't keep the value keyed by query name
 	if ($difference < 0) {
 	    die "Query match length ($querymatchedlength) from blast hit should not be greater than query length ($tokens[12]).\n";
 	}
-	
+
 	#Only extend matches that have max_mismatch or less number of nucleotides that can be not matched on either end of the blast alignment
 	if(($tokens[6] <= $max_mismatch) && (($tokens[12] - $tokens[7]) <= $max_mismatch)){
-	    
+
 	    #print "Difference: $tokens[0] $tokens[12] - $querymatchedlength = $difference\n";
 	    print LOGFILE "Difference: $tokens[0] $tokens[12] - $querymatchedlength = $difference\n";
-	    
+
 	    if ($difference != 0) { # The matched region is not "full length", and should be extended
-		
+
 		#print "Original coords: $tokens[8] $tokens[9]\n";
 		print LOGFILE "Original coords: $tokens[8] $tokens[9]\n";
-		
+
 		if ($direction eq "forward") {
 		    $tokens[8] -= ($tokens[6]-1);
 		    $tokens[9] += ($tokens[12] - $tokens[7]);
 		    #make sure coordinates do not exceed the bounds of the subject sequence
-		    if (($tokens[8] < 1) || ($tokens[9] > $tokens[13])) {
+		    if (($tokens[9] < 1) || ($tokens[9] > $tokens[13])) { # Query End Coordinate is equal to Subject End Coordinate
 			print LOGFILE "Subject contig too short to pull allele: $tokens[6],$tokens[7];$tokens[12]:$tokens[8],$tokens[9];$tokens[13]\n";
 			$short = 1;
 		    }
@@ -170,41 +169,45 @@ while (<INFILE>) {
 		    print LOGFILE "Adjusted coords: $tokens[8] $tokens[9]\n";
 		}
 	    }
-	    
+
 	}else{
-	    
 	    print LOGFILE "INFO: Did not extend blast hit. More than $max_mismatch nucleotides unaligned: $tokens[6],$tokens[7];$tokens[12]:$tokens[8],$tokens[9];$tokens[13]\n";
 	    $short = 1;
-	    
+
 	}
-	
+
 	# cutFasta command requires quotation marks on token[1] to properly parse the sequence identifier from the 'blastfile' *_hits_top.txt
-	# e.g., ntkp04:1|cmr:2454  ==>  pipe characters break the script 
+	# e.g., ntkp04:1|cmr:2454  ==>  pipe characters break the script
 	# e.g., gi|410113282|emb|CANR01000151.1|  ==> pipe characters break the script
-	
+
 	#Only pull sequences that have max_mismatch or less number of nucleotides that can be not matched on either end of the blast alignment
 	if(!$short){
 	    my $cutFasta = "$Bin/cutFasta -f $tokens[0] -x $tokens[8] -y $tokens[9] ";
 	    $cutFasta .= "-s \"$tokens[1]\" $fastafile";
-	    
+
 	    #print "cutFasta command: $cutFasta\n";
 	    print LOGFILE "cutFasta command: $cutFasta\n";
-	    
+
 	    my @seqlines = `$cutFasta`;
-	    
+
 	    for my $seq (@seqlines) {
-		
+
 		#print $seq;
 	    print OUTFILE $seq;
 	    print LOGFILE $seq;
 	    }
 	}else{
+    if (($tokens[8] == $tokens[13]) || ($tokens[9] == $tokens[13]) && ($perc_matched < 1)){
+      print OUTFILE ">$tokens[0]\n";
+      print OUTFILE "TRUNC\n";
+      print LOGFILE "WARN: Printed TRUNC as sequence because one it was a non full length hit at the end of the contig.\n";
+    } else {
 	    print OUTFILE ">$tokens[0]\n";
 	    print OUTFILE "SHORT\n";
 	    print LOGFILE "WARN: Printed SHORT as sequence because unaligned nucleotides were greater than $max_mismatch cutoff\n";
-	    
 	}
-	
+}
+
 	#print "\n\n";
 	print LOGFILE "\n\n";
     }

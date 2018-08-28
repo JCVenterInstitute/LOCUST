@@ -226,7 +226,7 @@ if ($opts{download_schema}){
 	system($cmd) == 0 || die "\n";
 	($opts{alleles}, $opts{scheme}) = get_downloaded_schema_and_alleles($OUTPUT, $START_CWD);
 	}
-} 
+}
 #my $lfh = path($log_file)->filehandle(">");
 #Open config file and assgin parameters
 my($BLAST_CMD,$FORMATDB_EXEC) = parse_config($opts{config});
@@ -795,9 +795,7 @@ sub create_seed{
 	unlink($logfile);
 	unlink("$allele_file.nhr");
 	unlink("$allele_file.nin");
-	unlink("
-
-file.nsq");
+	unlink("file.nsq");
     }
     open(my $bfh, "<", $output_blast) || die "ERROR: Cannot open $output_blast.\n";
     my %redund_allele_cnt = ();# For each allele count the number of other alleles which make it redundant
@@ -1042,6 +1040,9 @@ sub remove_short_seq_stubs{
 	    if($line =~ /^SHORT$/){
 		next;
 	    }
+			if($line =~ /^TRUNC$/){
+		next;
+			}
 	    if($first){
 		print $ofh $header;
 		$first = 0;
@@ -1373,7 +1374,7 @@ sub make_new_schema{
 	    if ($st_num eq "UNKNOWN") {
 		my $skip_bad = 0;
 		foreach my $value (@values) {
-		    if (($value eq "MISSING") || ($value eq "SHORT")) {
+		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "TRUNC")) {
 			$skip_bad = 1;
 		    } elsif ($value eq "NEW") {
 			$skip_bad = 1;
@@ -1883,6 +1884,8 @@ sub run_st_finder{
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
 	if ($querySeq =~ /^SHORT/) {
 	    $allelesFound{$queryAllele}{$queryName} = "SHORT";
+	} elsif ($querySeq =~ /^TRUNC/) {
+		$allelesFound{$queryAllele}{$queryName} = "TRUNC";
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
 
 	    #Note: Different alleles COULD have the same sequence
