@@ -144,9 +144,13 @@ Log::Log4perl->easy_init({level => $DEBUG, file => ">MLST_ST_finder.log"});
 	    $allelesFound{$queryAllele} = "SHORT";
 	}
   # If the query's sequence begins with "SHORT", declare the queryAllele's hit as TRUNC.
-  if ($querySeq =~ /TRUNC/){
-    INFO("    Query '$queryName' is at the end of a contig and is TRUNCated!");
-    $allelesFound{$queryAllele} = "TRUNC";
+  if ($querySeq =~ /5'PRTL/){
+    INFO("    Query '$queryName''s five prime end is at the end of a contig and is TRUNCated!");
+    $allelesFound{$queryAllele} = "5'PRTL";
+  }
+  if ($querySeq =~ /3'sPRTL/){
+    INFO("    Query '$queryName''s three prime end is at the end of a contig and is TRUNCated!");
+    $allelesFound{$queryAllele} = "3'PRTL";
   }
 	# Otherwise, do the following.
 	else {
@@ -188,7 +192,7 @@ Log::Log4perl->easy_init({level => $DEBUG, file => ">MLST_ST_finder.log"});
 		print $new_alleles_fh ">$allele\n" unless $new_alleles;
 		print $new_alleles_fh "$query_sequences->{$allele}\n" unless $new_alleles;
 	    }
-      if($allelesFound{$allele} eq 'TRUNC'){
+      if(($allelesFound{$allele} eq "5'PRTL") || ($allelesFound{$allele} eq "3'PRTL")){
 		print $new_alleles_fh ">$allele\n" unless $new_alleles;
 		print $new_alleles_fh "$query_sequences->{$allele}\n" unless $new_alleles;
 	    }

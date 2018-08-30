@@ -1040,8 +1040,11 @@ sub remove_short_seq_stubs{
 	    if($line =~ /^SHORT$/){
 		next;
 	    }
-			if($line =~ /^TRUNC$/){
+			if($line =~ /^5'PRTL$/){
 		next;
+			}
+			if($line =~ /^3'PRTL$/){
+				next;
 			}
 	    if($first){
 		print $ofh $header;
@@ -1374,7 +1377,7 @@ sub make_new_schema{
 	    if ($st_num eq "UNKNOWN") {
 		my $skip_bad = 0;
 		foreach my $value (@values) {
-		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "TRUNC")) {
+		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL")) {
 			$skip_bad = 1;
 		    } elsif ($value eq "NEW") {
 			$skip_bad = 1;
@@ -1884,8 +1887,10 @@ sub run_st_finder{
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
 	if ($querySeq =~ /^SHORT/) {
 	    $allelesFound{$queryAllele}{$queryName} = "SHORT";
-	} elsif ($querySeq =~ /^TRUNC/) {
-		$allelesFound{$queryAllele}{$queryName} = "TRUNC";
+	} elsif ($querySeq =~ /^5'PRTL/) {
+		$allelesFound{$queryAllele}{$queryName} = "5'PRTL";
+	} elsif ($querySeq =~ /^3'PRTL/) {
+		$allelesFound{$queryAllele}{$queryName} = "3'PRTL";
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
 
 	    #Note: Different alleles COULD have the same sequence

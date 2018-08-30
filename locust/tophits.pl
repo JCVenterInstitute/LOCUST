@@ -44,7 +44,7 @@ open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
 while (<INFILE>) {
 
 	my $line = $_;
-	
+
 	if ($line =~ /^#/) {
 		next;
 	}
@@ -67,7 +67,7 @@ while (<INFILE>) {
 	    $send = $sstart;
 	    $sstart = $tmp;
 	}
-	
+
 	my($queryAllele,$scheme) = split(/\_/,$qid,2);
 
 	#Store hits above 90% id
@@ -75,9 +75,9 @@ while (<INFILE>) {
 	    $multi_copy{$queryAllele}{$qid} = $line;
 	    $ids{$qid}{$sid} = $percent;
 	}
-	
+
 	if ((! exists $hits{$queryAllele}) || ($lenratio > $toplenratio{$queryAllele}) || (($lenratio == $toplenratio{$queryAllele}) && ($bitscore > $topbitscore{$queryAllele}))) {
-	    
+
 	    $hits{$queryAllele} = $line;
 	    $coords{$qid}{'start'} = $sstart;
 	    $coords{$qid}{'end'} = $send;
@@ -89,7 +89,7 @@ while (<INFILE>) {
 		$multi_copy{$a}{$queryAllele} = $line;
 		$ids{$qid}{$sid} = $percent;
 	    }
-	}	
+	}
 
 }
 
@@ -155,7 +155,7 @@ for my $i (0 .. $#alleles) {
 		    }else{
 			$multi_copy{$a1}{$allele1} = undef if(exists $multi_copy{$allele1});
 		    }
-		    
+
 		}
 	    }
 	}

@@ -192,16 +192,23 @@ while (<INFILE>) {
 
 	    for my $seq (@seqlines) {
 
-		#print $seq;
 	    print OUTFILE $seq;
 	    print LOGFILE $seq;
 	    }
 	}else{
-    if (($tokens[8] == $tokens[13]) || ($tokens[9] == $tokens[13]) && ($perc_matched < 1)){
+    if (($tokens[8] == $tokens[13]) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
-      print OUTFILE "TRUNC\n";
-      print LOGFILE "WARN: Printed TRUNC as sequence because one it was a non full length hit at the end of the contig.\n";
-    } else {
+      print OUTFILE "5'PRTL\n";
+      print LOGFILE "WARN: Printed 5'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
+    }
+
+    elsif (($tokens[9] == $tokens[13]) && ($perc_matched < 1)){
+      print OUTFILE ">$tokens[0]\n";
+      print OUTFILE "3'PRTL\n";
+      print LOGFILE "WARN: Printed 3'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
+    }
+
+    else {
 	    print OUTFILE ">$tokens[0]\n";
 	    print OUTFILE "SHORT\n";
 	    print LOGFILE "WARN: Printed SHORT as sequence because unaligned nucleotides were greater than $max_mismatch cutoff\n";
