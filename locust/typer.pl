@@ -1037,6 +1037,9 @@ sub remove_short_seq_stubs{
 		$first = 1;
 		next;
 	    }
+			if($line =~/^PSEUDO$/){
+				next;
+			}
 	    if($line =~ /^SHORT$/){
 		next;
 	    }
@@ -1377,7 +1380,7 @@ sub make_new_schema{
 	    if ($st_num eq "UNKNOWN") {
 		my $skip_bad = 0;
 		foreach my $value (@values) {
-		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL")) {
+		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO")) {
 			$skip_bad = 1;
 		    } elsif ($value eq "NEW") {
 			$skip_bad = 1;
@@ -1885,7 +1888,9 @@ sub run_st_finder{
 	$query_sequences{$queryName} = $querySeq;
 
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
-	if ($querySeq =~ /^SHORT/) {
+	if ($querySeq =~ /^PSEUDO/){
+		$allelesFound{$queryAllele}{$queryName} = "PSEUDO";
+	} elsif ($querySeq =~ /^SHORT/) {
 	    $allelesFound{$queryAllele}{$queryName} = "SHORT";
 	} elsif ($querySeq =~ /^5'PRTL/) {
 		$allelesFound{$queryAllele}{$queryName} = "5'PRTL";

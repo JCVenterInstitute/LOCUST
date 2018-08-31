@@ -58,7 +58,9 @@ use Data::Dumper;
 use File::Basename;
 use FindBin qw($Bin);
 use lib "$Bin";
-
+use Bio::SeqIO;
+use Bio::Tools::CodonTable;
+use IO::String;
 ############################ OPTIONS ###############################
 
 my ($fastafile, $blastfile, $allele_file, $seeds, $max_mismatch, $help, $DEBUG, $VERBOSE);
@@ -108,7 +110,7 @@ my($blastname,$path,$suffix) = fileparse($blastfile);
 my ($base, $ext) = split (/\./, $blastname);
 my $outputfile = $path . "/" . $base . "_seqs.fa";
 my $logfile = $path . "/" . $base . "_pullseqs.log";
-
+my $pepfile = $path . "/" . $base . "_translated_seqs.fa";
 open (INFILE, $blastfile) || die "Can't open $blastfile: $!";
 open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
 open (LOGFILE, ">$logfile") || die "Can't open $logfile: $!";
@@ -189,13 +191,37 @@ while (<INFILE>) {
 	    print LOGFILE "cutFasta command: $cutFasta\n";
 
 	    my @seqlines = `$cutFasta`;
+      my $header = $seqlines[0];
+      chomp $header;
+      my $fasta_sequence = join("", @seqlines[1 .. $#seqlines]);
+      my $seq_str = $header . "\n" . $fasta_sequence . "\n";
+      open(my $stringfh, "<", \$seq_str) or die "Could not open string for reading: $!";
+      my $seqio = Bio::SeqIO-> new(-fh => $stringfh,
+                                   -format => "fasta",);
 
-	    for my $seq (@seqlines) {
+      while(my $seqout = $seqio->next_seq){
+        $seqout->verbose(0);
+        my $nuc_length = $seqout->length;
+        my $prot_seq = $seqout->translate(-codontable_id => 11,);
+        my $prot_length = $prot_seq->length;
 
-	    print OUTFILE $seq;
-	    print LOGFILE $seq;
+      if ($nuc_length / 3 == $prot_length){
+      for my $seq (@seqlines) {
+  	    print OUTFILE $seq;
+  	    print LOGFILE $seq;
 	    }
-	}else{
+    } else {
+        open (PEPFILE, ">$pepfile") || die "Can't open $pepfile: $!";
+        print OUTFILE ">$tokens[0]\n";
+        print OUTFILE "PSEUDO\n";
+        print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
+        print PEPFILE ">$tokens[0]\n";
+        print PEPFILE $prot_seq->seq . "\n";
+        print LOGFILE $prot_seq;
+        close (PEPFILE);
+    }
+  }
+   }else{
     if (($tokens[8] == $tokens[13]) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
       print OUTFILE "5'PRTL\n";
@@ -219,7 +245,6 @@ while (<INFILE>) {
 	print LOGFILE "\n\n";
     }
 }
-
-close (INFILE);
 close (OUTFILE);
+close (INFILE);
 close (LOGFILE);
