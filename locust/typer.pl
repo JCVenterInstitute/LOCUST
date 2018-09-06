@@ -249,14 +249,14 @@ $opts{seed_file} = create_seed($opts{alleles}) unless ($opts{seed_file});
 my $SEED_ALLELES = find_seed_alleles($opts{seed_file});
 
 my ($sth,$nth);
-my $new_allele_fa;
+my $new_allele_fa = "$OUTPUT/NOVEL_alleles.fa";
 
 #Open files for final output
 unless ($opts{novel_schema}) {
 
     #Open file handle to print all st_finder output to
     $sth = path("$OUTPUT/ST_all.out")->filehandle(">");
-    $nth = path("$OUTPUT/NOVEL_alleles.fa")->filehandle(">");
+    $nth = path($new_allele_fa)->filehandle(">");
 
 }
 
@@ -324,7 +324,8 @@ if($opts{append_schema}){
     #Open combined alleles file
     my $combined_alleles = "$append_outdir/appended_alleles.fa";
     my $cfh = path($combined_alleles)->filehandle(">");
-		print $combined_alleles;
+    print $combined_alleles;
+
     my $nr_file = &clean_fasta_file($opts{alleles},$new_allele_fa,$append_outdir);
 
     #Combined new alleles with initial alleles
@@ -1656,6 +1657,7 @@ sub clean_fasta_file{
 
 		unless (exists $unique_sequences->{$current_sequence}->{$p_allele}){
 
+		    print "$p_allele\n";
 		    if(exists $allele_numbers->{$p_allele}){
 
 			$allele_numbers->{$p_allele}++;
@@ -1799,8 +1801,9 @@ sub init_st_finder{
     while (my $mlstAllele = $inMlstAlleles->next_seq) {
 
 	my($allele,$id) = split(/\_/,$mlstAllele->primary_id,2);
-	$alleleMap->{lc($mlstAllele->seq)}->{$allele} = $id;
 
+	$alleleMap->{lc($mlstAllele->seq)}->{$allele} = $id;
+	
 	if ($mlstAllele->primary_id !~ /\_/) {
 	    die "FATAL: allele $mlstAllele->primary_id is not in expected format of GeneName_Identifier where GeneName the name of a gene with no special characters such as _ and Identifier is typically a number.\n";
 	}
@@ -1808,6 +1811,7 @@ sub init_st_finder{
 	$alleles_seen_alleles->{$allele}{$id} = 1;
     }
 
+       
     #perform sanity checking
     foreach my $allele (keys %{$alleles_seen_ST}) {
 	foreach my $id (keys $alleles_seen_ST->{$allele}) {
@@ -1902,7 +1906,7 @@ sub run_st_finder{
     #Creates base string, with the alleles that do not have variants
     #Variants will be 'plugged' in later
     my $location_count = 0;
-
+    
     foreach my $key (@$allelesOrdered){
 
 	$locations{$key} = $location_count;
@@ -1932,6 +1936,7 @@ sub run_st_finder{
 	}
     }
 
+       
     my @variants;
     push @variants, clone(\@base_string);
 
@@ -1987,10 +1992,20 @@ sub run_st_finder{
 	}
     }
 
-    # If the stKey exists in stMap, print both ST found and stKey to output file.
-    foreach my $combo (@variants){
+    # Clean up @variants to remove duplicate type string
+    my $unique_variants;
+    foreach (@variants){
+	my $variant_value = $_;
+	my $variant_string = join("\t",@$variant_value);
 
-	my $stKey = join("\t",@$combo);
+	$unique_variants->{$variant_string} = 1;
+
+    }
+
+   # If the stKey exists in stMap, print both ST found and stKey to output file.
+    foreach my $stKey (keys %$unique_variants){
+
+	#my $stKey = join("\t",@$combo);
 	my $ST;
 
 	if (exists $stMap->{$stKey}) {
