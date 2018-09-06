@@ -72,7 +72,6 @@ while (<INFILE>) {
 
 	#Store hits above 90% id
 	if($percent >= 90){
-	    $multi_copy{$queryAllele}{$qid} = $line;
 	    $ids{$qid}{$sid} = $percent;
 	}
 
@@ -85,12 +84,9 @@ while (<INFILE>) {
 	    $topbitscore{$queryAllele} = $bitscore;
 	    $toplenratio{$queryAllele} = $lenratio;
 
-	    if($percent >= 90){
-		$multi_copy{$a}{$queryAllele} = $line;
-		$ids{$qid}{$sid} = $percent;
-	    }
-	}
+	    $multi_copy{$queryAllele}{$qid} = _trim($line);
 
+	}
 }
 
 my @alleles = (keys %coords);
@@ -102,6 +98,7 @@ for my $i (0 .. $#alleles) {
     my $end1 = $coords{$allele1}{'end'};
     my $sid1 = $coords{$allele1}{'sid'};
     my $length1 = ($end1 - $start1) + 1;
+
     for my $j (($i + 1) .. $#alleles) {
 	my $allele2 = $alleles[$j];
 	my $start2 = $coords{$allele2}{'start'};
@@ -124,6 +121,7 @@ for my $i (0 .. $#alleles) {
 		    $overlap = ($end1 - $start2) + 1;
 		}
 	    }
+
 	    if (($overlap >= 0.5 * $length1) || ($overlap >= 0.5 * $length2)) {
 		my($a1,$scheme1) = split(/\_/,$allele1,2);
 		my($a2,$scheme1) = split(/\_/,$allele2,2);
@@ -150,10 +148,11 @@ for my $i (0 .. $#alleles) {
 		    my $a1bit = $topbitscore{$allele1};
 		    my $a2bit = $topbitscore{$allele2};
 
+		    #Remove overlapping multi copy alleles
 		    if($a1bit > $a2bit){
-			$multi_copy{$a2}{$allele2} = undef if(exists $multi_copy{$allele2});
+			$multi_copy{$a2}{$allele2} = undef if(exists $multi_copy{$a2}{$allele2});
 		    }else{
-			$multi_copy{$a1}{$allele1} = undef if(exists $multi_copy{$allele1});
+			$multi_copy{$a1}{$allele1} = undef if(exists $multi_copy{$a1}{$allele1});
 		    }
 
 		}
@@ -180,19 +179,23 @@ foreach my $gene(keys %multi_copy){
 
     foreach my $a(keys $multi_copy{$gene}){
 
-	my($allele,$schema) = split(/_/,$a);
+	if(defined $multi_copy{$gene}{$a}){
 
-	if(exists $ids{$a}){
-	    my $hit = $multi_copy{$allele}{$a};
+	    my($allele,$schema) = split(/_/,$a);
 
-	    print  "$hit\n";
+	    #If allele is above 90%(hits stored in $ids)
+	    if(exists $ids{$a}){
+		my $hit = $multi_copy{$allele}{$a};
 
-	    # IF FLAG PRINT TO HITS FILE
-	    # Don't print the hit that was the top hit as that was
-	    # already printed
+		print  "$hit\n";
 
-	    if($multi_flag){
-		print OUTFILE "$hit\n" unless ($hits{$gene} eq $hit);
+		# IF FLAG PRINT TO HITS FILE
+		# Don't print the hit that was the top hit as that was
+		# already printed
+
+		if($multi_flag){
+		    print OUTFILE "$hit\n" unless ($hits{$gene} eq $hit);
+		}
 	    }
 	}
     }
