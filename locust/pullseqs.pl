@@ -114,7 +114,9 @@ my $pepfile = $path . "/" . $base . "_translated_seqs.fa";
 open (INFILE, $blastfile) || die "Can't open $blastfile: $!";
 open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
 open (LOGFILE, ">$logfile") || die "Can't open $logfile: $!";
-
+if (-e $pepfile){
+  unlink($pepfile);
+}
 while (<INFILE>) {
 
     chomp $_;
@@ -211,7 +213,11 @@ while (<INFILE>) {
   	    print LOGFILE $seq;
 	    }
     } else {
-        open (PEPFILE, ">$pepfile") || die "Can't open $pepfile: $!";
+        if (-e $pepfile){
+          open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
+        } else {
+          open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
+        }
         print OUTFILE ">$tokens[0]\n";
         print OUTFILE "PSEUDO\n";
         print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
