@@ -206,28 +206,26 @@ pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 #create type log file
 my $log_dir  = "$OUTPUT/logs";
 mkdir($log_dir) unless (-d $log_dir);
-my $log_file = "$log_dir/typer.log";
-open(my $lfh, ">", $log_file);
-print $lfh "|Started typer.pl "  .  localtime . "\n";
+
 #Download Alleles and Schema from PubMLST
 if ($opts{download_schema}){
-	if ($opts{seed_file} or $opts{alleles} or $opts{scheme}){
-		print "Cannot use --download_schema option if giving seed file, alleles or schema.\n";
-		print $lfh "ERROR: Cannot use --download_schema option if giving seed file, alleles or schema.\n";
-		exit();
-	} else {
 	my $search_term = $opts{download_schema};
 	my $num_of_schema_alleles = $opts{schema_alleles};
 	my $cmd = "perl $Bin/download_mlst.pl";
 	$cmd .= " -o '$search_term'";
 	if ($num_of_schema_alleles){
 		$cmd.= " -l $num_of_schema_alleles";
-		}
+	}
 	system($cmd) == 0 || die "\n";
 	($opts{alleles}, $opts{scheme}) = get_downloaded_schema_and_alleles($OUTPUT, $START_CWD);
-	}
 }
+
+my $log_file = "$log_dir/typer.log";
 #my $lfh = path($log_file)->filehandle(">");
+open(my $lfh, ">", $log_file);
+
+print $lfh "|Started typer.pl "  .  localtime . "\n";
+
 #Open config file and assgin parameters
 my($BLAST_CMD,$FORMATDB_EXEC) = parse_config($opts{config});
 
@@ -373,11 +371,7 @@ if($opts{tree}){
 #&remove_short_seq_stubs($top_seqs_files);
 
 unless($opts{skip_itol}){
-	if ($opts{novel_schema}){
-			&create_itol_file("$OUTPUT/novel_schema/novel_ST_all.out");
-	}	else{
 	&create_itol_file("$OUTPUT/ST_all.out");
-	}
 }
 
 &cleanup_files;
@@ -775,6 +769,7 @@ sub median{
 sub create_seed{
 
     print $lfh "|Step: Create seed file from allele file\n";
+
     my $allele_file = shift;
     my $seed_file = "$OUTPUT/seeds_from_alleles.fa";
     my $output_blast = "$OUTPUT/alleles_vs_alleles.table";
@@ -796,7 +791,9 @@ sub create_seed{
 	unlink($logfile);
 	unlink("$allele_file.nhr");
 	unlink("$allele_file.nin");
-	unlink("file.nsq");
+	unlink("
+
+file.nsq");
     }
     open(my $bfh, "<", $output_blast) || die "ERROR: Cannot open $output_blast.\n";
     my %redund_allele_cnt = ();# For each allele count the number of other alleles which make it redundant
@@ -1038,18 +1035,9 @@ sub remove_short_seq_stubs{
 		$first = 1;
 		next;
 	    }
-			if($line =~/^PSEUDO$/){
-				next;
-			}
-	    if($line =~ /^SHORT$/){
+	    if($line =~ /^SHORT$/ || $line =~ /^PSEUDO$/ || $line =~ /^5'PRTL$/ || $line =~ /^3'PRTL$/){
 		next;
 	    }
-			if($line =~ /^5'PRTL$/){
-		next;
-			}
-			if($line =~ /^3'PRTL$/){
-				next;
-			}
 	    if($first){
 		print $ofh $header;
 		$first = 0;
@@ -1381,8 +1369,8 @@ sub make_new_schema{
 	    if ($st_num eq "UNKNOWN") {
 		my $skip_bad = 0;
 		foreach my $value (@values) {
-		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO")) {
-			$skip_bad = 1;
+			if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO")) {
+					$skip_bad = 1;
 		    } elsif ($value eq "NEW") {
 			$skip_bad = 1;
 			print $lfh "|WARNING: no NEW alleles should be found for append_schema option but $sample had type $st_num for ($st_type).\n";
@@ -1815,7 +1803,7 @@ sub init_st_finder{
 	my($allele,$id) = split(/\_/,$mlstAllele->primary_id,2);
 
 	$alleleMap->{lc($mlstAllele->seq)}->{$allele} = $id;
-	
+
 	if ($mlstAllele->primary_id !~ /\_/) {
 	    die "FATAL: allele $mlstAllele->primary_id is not in expected format of GeneName_Identifier where GeneName the name of a gene with no special characters such as _ and Identifier is typically a number.\n";
 	}
@@ -1823,7 +1811,7 @@ sub init_st_finder{
 	$alleles_seen_alleles->{$allele}{$id} = 1;
     }
 
-       
+
     #perform sanity checking
     foreach my $allele (keys %{$alleles_seen_ST}) {
 	foreach my $id (keys $alleles_seen_ST->{$allele}) {
@@ -1892,14 +1880,14 @@ sub run_st_finder{
 	$query_sequences{$queryName} = $querySeq;
 
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
-	if ($querySeq =~ /^PSEUDO/){
-		$allelesFound{$queryAllele}{$queryName} = "PSEUDO";
-	} elsif ($querySeq =~ /^SHORT/) {
+	if ($querySeq =~ /^SHORT/) {
 	    $allelesFound{$queryAllele}{$queryName} = "SHORT";
-	} elsif ($querySeq =~ /^5'PRTL/) {
-		$allelesFound{$queryAllele}{$queryName} = "5'PRTL";
-	} elsif ($querySeq =~ /^3'PRTL/) {
-		$allelesFound{$queryAllele}{$queryName} = "3'PRTL";
+		} elsif ($querySeq =~ /^PSEUDO/) {
+			    $allelesFound{$queryAllele}{$queryName} = "PSEUDO";
+		} elsif ($querySeq =~ /^5'PRTL/) {
+			    $allelesFound{$queryAllele}{$queryName} = "5'PRTL";
+		} elsif ($querySeq =~ /^3'PRTL/) {
+			    $allelesFound{$queryAllele}{$queryName} = "3'PRTL";
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
 
 	    #Note: Different alleles COULD have the same sequence
@@ -1924,7 +1912,7 @@ sub run_st_finder{
     #Creates base string, with the alleles that do not have variants
     #Variants will be 'plugged' in later
     my $location_count = 0;
-    
+
     foreach my $key (@$allelesOrdered){
 
 	$locations{$key} = $location_count;
@@ -1954,7 +1942,7 @@ sub run_st_finder{
 	}
     }
 
-       
+
     my @variants;
     push @variants, clone(\@base_string);
 
@@ -2188,7 +2176,7 @@ sub create_itol_file{
 	my $typer_file = shift;
 	my $cmd = "perl $Bin/create_itol.pl";
 	$cmd .= " --input_file $typer_file";
-	print $lfh "|Step: Creating ITOL Annotation file.\n";
+	print $lfh "|Step: Creating ITOL Annotation file.";
 	print $lfh "Running $cmd\n";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
 }

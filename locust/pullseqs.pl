@@ -57,10 +57,11 @@ use Pod::Usage;
 use Data::Dumper;
 use File::Basename;
 use FindBin qw($Bin);
-use lib "$Bin";
 use Bio::SeqIO;
 use Bio::Tools::CodonTable;
 use IO::String;
+use lib "$Bin";
+
 ############################ OPTIONS ###############################
 
 my ($fastafile, $blastfile, $allele_file, $seeds, $max_mismatch, $help, $DEBUG, $VERBOSE);
@@ -111,12 +112,13 @@ my ($base, $ext) = split (/\./, $blastname);
 my $outputfile = $path . "/" . $base . "_seqs.fa";
 my $logfile = $path . "/" . $base . "_pullseqs.log";
 my $pepfile = $path . "/" . $base . "_translated_seqs.fa";
-open (INFILE, $blastfile) || die "Can't open $blastfile: $!";
-open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
-open (LOGFILE, ">$logfile") || die "Can't open $logfile: $!";
 if (-e $pepfile){
   unlink($pepfile);
 }
+open (INFILE, $blastfile) || die "Can't open $blastfile: $!";
+open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
+open (LOGFILE, ">$logfile") || die "Can't open $logfile: $!";
+
 while (<INFILE>) {
 
     chomp $_;
@@ -126,13 +128,14 @@ while (<INFILE>) {
     print LOGFILE "Processing: $line\n";
 
     if($line){
-	my @tokens = split(/\t/, $line);
-	my $querymatchedlength = ($tokens[7] - $tokens[6]) + 1;
-	my $genomematchedlength = ($tokens[8] <= $tokens[9] ? (($tokens[9] - $tokens[8]) + 1) : (($tokens[8] - $tokens[9]) + 1));
-	my $direction = ($tokens[8] <= $tokens[9] ? "forward" : "reverse");
-	my $perc_matched = $querymatchedlength / $tokens[12];
-	my $difference = $tokens[12] - $querymatchedlength;
-	my $short = 0; #true if we cannot retrieve a full length sequence
+    	my @tokens = split(/\t/, $line);
+    	my $querymatchedlength = ($tokens[7] - $tokens[6]) + 1;
+    	my $genomematchedlength = ($tokens[8] <= $tokens[9] ? (($tokens[9] - $tokens[8]) + 1) : (($tokens[8] - $tokens[9]) + 1));
+    	my $direction = ($tokens[8] <= $tokens[9] ? "forward" : "reverse");
+    	my $perc_matched = $querymatchedlength / $tokens[12];
+    	my $difference = $tokens[12] - $querymatchedlength;
+    	my $short = 0; #true if we cannot retrieve a full length sequence
+
 	#need to get query length form blast because we use the same name for multiple queries and so can't keep the value keyed by query name
 	if ($difference < 0) {
 	    die "Query match length ($querymatchedlength) from blast hit should not be greater than query length ($tokens[12]).\n";
@@ -153,7 +156,7 @@ while (<INFILE>) {
 		    $tokens[8] -= ($tokens[6]-1);
 		    $tokens[9] += ($tokens[12] - $tokens[7]);
 		    #make sure coordinates do not exceed the bounds of the subject sequence
-		    if (($tokens[9] < 1) || ($tokens[9] > $tokens[13])) { # Query End Coordinate is equal to Subject End Coordinate
+		    if (($tokens[8] < 1) || ($tokens[9] > $tokens[13])) {
 			print LOGFILE "Subject contig too short to pull allele: $tokens[6],$tokens[7];$tokens[12]:$tokens[8],$tokens[9];$tokens[13]\n";
 			$short = 1;
 		    }
@@ -175,6 +178,7 @@ while (<INFILE>) {
 	    }
 
 	}else{
+
 	    print LOGFILE "INFO: Did not extend blast hit. More than $max_mismatch nucleotides unaligned: $tokens[6],$tokens[7];$tokens[12]:$tokens[8],$tokens[9];$tokens[13]\n";
 	    $short = 1;
 
@@ -200,57 +204,54 @@ while (<INFILE>) {
       open(my $stringfh, "<", \$seq_str) or die "Could not open string for reading: $!";
       my $seqio = Bio::SeqIO-> new(-fh => $stringfh,
                                    -format => "fasta",);
+       while(my $seqout = $seqio->next_seq){
+         $seqout->verbose(0);
+         my $nuc_length = $seqout->length;
+         my $prot_seq = $seqout->translate(-codontable_id => 11,);
+         my $prot_length = $prot_seq->length;
+       if (int($nuc_length / 3) == $prot_length){
 
-      while(my $seqout = $seqio->next_seq){
-        $seqout->verbose(0);
-        my $nuc_length = $seqout->length;
-        my $prot_seq = $seqout->translate(-codontable_id => 11,);
-        my $prot_length = $prot_seq->length;
+	    for my $seq (@seqlines) {
 
-      if ($nuc_length / 3 == $prot_length){
-      for my $seq (@seqlines) {
-  	    print OUTFILE $seq;
-  	    print LOGFILE $seq;
+		#print $seq;
+	    print OUTFILE $seq;
+	    print LOGFILE $seq;
 	    }
+	} else{
+    if (-e $pepfile){
+      open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
     } else {
-        if (-e $pepfile){
-          open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
-        } else {
-          open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
-        }
-        print OUTFILE ">$tokens[0]\n";
-        print OUTFILE "PSEUDO\n";
-        print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
-        print PEPFILE ">$tokens[0]\n";
-        print PEPFILE $prot_seq->seq . "\n";
-        print LOGFILE $prot_seq;
-        close (PEPFILE);
+      open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
+    }
+    print OUTFILE ">$tokens[0]\n";
+      print OUTFILE "PSEUDO\n";
+      print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
+      print PEPFILE ">$tokens[0]\n";
+      print PEPFILE $prot_seq->seq . "\n";
+      print LOGFILE $prot_seq;
+      close (PEPFILE);
     }
   }
-   }else{
-    if (($tokens[8] == $tokens[13]) && ($perc_matched < 1)){
+} else {
+  if (($tokens[8] == $tokens[13]) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
       print OUTFILE "5'PRTL\n";
       print LOGFILE "WARN: Printed 5'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
-    }
-
-    elsif (($tokens[9] == $tokens[13]) && ($perc_matched < 1)){
+  } elsif (($tokens[9] == $tokens[13]) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
       print OUTFILE "3'PRTL\n";
       print LOGFILE "WARN: Printed 3'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
-    }
-
-    else {
+    } else {
 	    print OUTFILE ">$tokens[0]\n";
 	    print OUTFILE "SHORT\n";
 	    print LOGFILE "WARN: Printed SHORT as sequence because unaligned nucleotides were greater than $max_mismatch cutoff\n";
 	}
 }
-
 	#print "\n\n";
 	print LOGFILE "\n\n";
     }
 }
-close (OUTFILE);
+
 close (INFILE);
+close (OUTFILE);
 close (LOGFILE);
