@@ -209,8 +209,8 @@ while (<INFILE>) {
          my $nuc_length = $seqout->length;
          my $prot_seq = $seqout->translate(-codontable_id => 11,);
          my $prot_length = $prot_seq->length;
-       if (int($nuc_length / 3) == $prot_length){
-
+         my $translated_seq = $prot_seq->seq;
+       if ((int($nuc_length / 3) == $prot_length) && (index($translated_seq, "*") + 1 == $prot_length)) {
 	    for my $seq (@seqlines) {
 
 		#print $seq;
@@ -223,6 +223,7 @@ while (<INFILE>) {
     } else {
       open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
     }
+
     print OUTFILE ">$tokens[0]\n";
       print OUTFILE "PSEUDO\n";
       print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
