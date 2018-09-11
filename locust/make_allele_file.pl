@@ -77,7 +77,7 @@ while(<$fh>){
 	    
 	    #Find prefix and strip intital numbering
 	    my($a,$n) = split(/_/,$current_header);
-	    $allele_count->{$a} = 0;
+	    $allele_count->{$a} = 1;
 		
 	    #Store previous found sequence with its header
 	    $seq_hsh->{$current_seq}->{$a} = 1;
@@ -102,8 +102,6 @@ my($a,$n) = split(/_/,$current_header);
 $seq_hsh->{$current_seq}->{$a} = 1;
 $in_count++;
 
-$allele_count->{$a} = 0 ;
-
 #Print new multi fasta files with non redundant sequences and
 #new numbering
 my $name = path($opts{input_file})->basename;
@@ -121,10 +119,8 @@ foreach my $seq (keys %$seq_hsh){
     print_log($m) if (scalar @allele_matches > 1);
 
     #remove trailing number if one
+    
     foreach my $allele(keys %{$seq_hsh->{$seq}}){
-	
-	$allele_count->{$allele}++;
-	
 	#Print new header line
 	print $ofh ">$allele" . "_" . "$allele_count->{$allele}\n";
 	
@@ -135,6 +131,8 @@ foreach my $seq (keys %$seq_hsh){
 	
 	#Print sequence
 	print $ofh "$seq_chunk";
+
+	$allele_count->{$allele}++;
 	
 	#increment count of new entries being printed
 	$nr_count++;
