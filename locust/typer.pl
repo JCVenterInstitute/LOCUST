@@ -2227,9 +2227,9 @@ sub cleanup_files{
     }
 }
 sub check_params{
-    
+
     my $error = "";
-    
+
     if($opts{config}){
 	if ($opts{config} !~ /^\//) {
 	    $opts{config} = "$START_CWD/$opts{config}";
@@ -2240,13 +2240,13 @@ sub check_params{
     }else{
         $error .= "ERROR: Could not find valid config file in current working directory. Please provide one using --config\n";
     }
-    
+
     if($opts{input_file}){
 	if ($opts{input_file} !~ /^\//) {
 	    $opts{input_file} = "$START_CWD/$opts{input_file}";
 	}
 	$error .= "ERROR: $opts{input_file} does not exist or is size zero\n" unless (-s $opts{input_file});
-	
+
 	if($opts{hmm_model}){
 	    $error .= "ERROR: Must provide --gb_list if running HMM models without NCBI downloading\n" unless($opts{gb_list});
 	}
@@ -2254,13 +2254,13 @@ sub check_params{
 	if($opts{org_search} || $opts{biosample_list} || $opts{accession_list} || $opts{input_path}){
 	    $error .= "ERROR: Please provide only one input option: --input_file, --org_search, --biosample_list, --accession_list, --input_path\n";
 	}
-	
+
     }elsif(!($opts{org_search} || $opts{biosample_list} || $opts{accession_list} || $opts{input_path})){
 	$error .= "ERROR: Option --input_file/-i is required\n";
     }
-    
+
     if($opts{seed_file}){
-	
+
 	if ($opts{seed_file} !~ /^\//) {
 	    $opts{seed_file} = "$START_CWD/$opts{seed_file}";
 	}
@@ -2268,7 +2268,20 @@ sub check_params{
     }elsif($opts{incrememnt}){
 	$error .= "ERROR: Option --seed_file is required when using the --incrememnt option\n";
     }
-    
+		if ($opts{download_schema}) {
+			if ($opts{scheme}) {
+				$error .= "ERROR: Cannot use the download schema option when providing schema\n";
+				die("ERROR: Cannot use the download schema option when providing schema.\n");
+			}
+			if ($opts{alleles}) {
+				$error .= "ERROR: Cannot use the download schema option when providing alleles file\n";
+				die("ERROR: Cannot use the download schema option when providing alleles file.\n");
+			}
+			if ($opts{seed_file}) {
+				$error .= "ERROR: Cannot use the download schema option when providing a seed file\n";
+				die("ERROR: Cannot use the download schema option when providing a seed file.\n");
+			}
+		}
     unless($opts{download_schema}){
 	if($opts{scheme}){
 	    if ($opts{scheme} !~ /^\//) {
@@ -2278,7 +2291,7 @@ sub check_params{
 	}else{
 	    $error .= "ERROR: Option --scheme/-m is required, unless doing --novel_schema\n" unless($opts{novel_schema});
 	}
-	
+
 	if($opts{alleles}){
 	    if ($opts{alleles} !~ /^\//) {
 		$opts{alleles} = "$START_CWD/$opts{alleles}";
@@ -2288,11 +2301,11 @@ sub check_params{
 	    $error .= "ERROR: Option --alleles/-a is required, unless doing --novel_schema\n" unless($opts{novel_schema});
 	}
     }
-    
+
     if($opts{novel_schema} && $opts{append_schema}){
 	$error .= "ERROR: Can only use either --novel_schema OR --append_schema. Can not use both options\n";
     }
-    
+
     if($opts{tree}){
 
 	$error .= "ERROR: the arugment value '$opts{tree}' for tree option is not valid. The valid entries are 'raxml' or 'fasttree'\n" unless(lc($opts{tree}) eq 'raxml' || lc($opts{tree}) eq 'fasttree');
