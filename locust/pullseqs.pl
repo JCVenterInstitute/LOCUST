@@ -211,28 +211,31 @@ while (<INFILE>) {
          my $prot_length = $prot_seq->length;
          my $translated_seq = $prot_seq->seq;
        if ((int($nuc_length / 3) == $prot_length) && (index($translated_seq, "*") + 1 == $prot_length)) {
-	    for my $seq (@seqlines) {
+    	    for my $seq (@seqlines) {
 
-		#print $seq;
-	    print OUTFILE $seq;
-	    print LOGFILE $seq;
-	    }
-	} else{
-    if (-e $pepfile){
-      open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
-    } else {
-      open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
-    }
-
-    print OUTFILE ">$tokens[0]\n";
-      print OUTFILE "PSEUDO\n";
-      print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
-      print PEPFILE ">$tokens[0]\n";
-      print PEPFILE $prot_seq->seq . "\n";
-      print LOGFILE $prot_seq;
-      close (PEPFILE);
-    }
-  }
+    		#print $seq;
+    	    print OUTFILE $seq;
+    	    print LOGFILE $seq;
+    	    }
+    	} elsif (index($translated_seq, "*") != -1){
+        if (-e $pepfile){
+          open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
+        } else {
+          open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
+        }
+          print OUTFILE ">$tokens[0]\n";
+          print OUTFILE "PSEUDO\n";
+          print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
+          print PEPFILE ">$tokens[0]\n";
+          print PEPFILE $prot_seq->seq . "\n";
+          print LOGFILE $prot_seq;
+          close (PEPFILE);
+        } else {
+          print OUTFILE ">$tokens[0]\n";
+          print OUTFILE "NEW\n";
+          print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit without a truncation event.\n";
+        }
+      }
 } else {
   if (($tokens[8] == $tokens[13]) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
