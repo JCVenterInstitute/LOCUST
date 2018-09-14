@@ -33,7 +33,6 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --append_schema
                          --novel_schema
                          --download_schema
-                         --schema_alleles
                          --tree <type of tree>
                          --config <config file>
                          --org_search
@@ -76,8 +75,6 @@ B<--append_schema>  ; Option to extend schema with new alleles found in initial 
 B<--novel_schema>    : Creates a novel scheme
 
 B<--download_schema>	: Download Schema and Alleles from PubMLST. Provide an organism to search for.
-
-B<--schema_alleles>	  : The number of alleles in the downloaded schema.
 
 B<--tree, t>         : Type of tree building. Options: raxml,fasttree
 
