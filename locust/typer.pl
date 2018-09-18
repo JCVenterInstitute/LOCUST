@@ -312,6 +312,9 @@ unless($opts{novel_schema}){
     &_cat($nth,$fa_files);
 }
 
+close $sth;
+close $nth;
+
 #Run st finder on new alleles and add results to original
 #output file
 if($opts{append_schema}){
@@ -341,7 +344,8 @@ if($opts{append_schema}){
     system($cmd) == 0 || die("ERROR: Problem running $cmd");
 
     unlink($combined_alleles . "_orig");
-
+    close $cfh;
+    
     #Run seq type with new alleles
     print $lfh "|Step: Run seq typer on new alleles\n";
     my($nst_files,$nfa_files) = run_seq_type($input_file,$combined_alleles);
@@ -350,11 +354,13 @@ if($opts{append_schema}){
     my $new_st_file = "$append_outdir/tmp_allele_ST.out";
     my $nst = path($new_st_file)->filehandle(">");
     &_cat($nst,$nst_files);
-
+    close $nst;
+    
     #Add new ST types to $opts{mlst_scheme}
     print $lfh "|Step: Added new sequene types to user inputed scheme\n";
     &make_new_schema($new_st_file,$opts{scheme},$append_outdir);
-
+    unlink($new_st_file);
+	
 }elsif($opts{novel_schema}){
 
     print $lfh "|Step: Create novel files\n";
@@ -682,7 +688,6 @@ sub clean_user_input{
 
     print $lfh "|Step: Cleaning user supply input\n";
     my $dos_exect = "$Bin/dos2unix";
-    my $cmd;
     my @files = ($opts{alleles},$opts{biosample_list},$opts{seed},$opts{scheme},$opts{input},$opts{accession_list});
 
     foreach my $file(@files){
@@ -693,6 +698,9 @@ sub clean_user_input{
 	    system($cmd) == 0 || die( "Error: $cmd failed\n");
 	}
     }
+
+    my $cmd = $CLEAN_FASTA . " $opts{alleles}";
+    system($cmd) == 0 || die();
 
     clean_identifiers($opts{input_file}) if ($opts{input_file});
 }
@@ -1291,10 +1299,14 @@ sub make_new_schema{
     my $new_file =  "$outdir/appended_scheme.txt";
     my $final_st_file = "$outdir/append_allele_ST.out";
 
-    my $new_fh = path($new_file)->filehandle(">");
-    my $final_st_fh = path($final_st_file)->filehandle(">");
-    my $orig_fh = path($orig_st)->filehandle("<");
+    #my $new_fh = path($new_file)->filehandle(">");
+    #my $final_st_fh = path($final_st_file)->filehandle(">");
+    #my $orig_fh = path($orig_st)->filehandle("<");
 
+    open(my $new_fh, ">", $new_file) || die "ERROR: Cannot open $new_file.\n";
+    open(my $final_st_fh, ">", $final_st_file) || die "ERROR: Cannot open $final_st_file.\n";
+    open(my $orig_fh, "<", $orig_st) || die "ERROR: Cannot open $orig_st.\n";
+    
     #Determines the max ST Type Number found in
     #original file
     my ($ST_type_size,$ST_attr_size);
@@ -1303,6 +1315,7 @@ sub make_new_schema{
 
     while(my $line = <$orig_fh>){
 	$line =~ s/\s+$//;
+
         my @data = split("\t",$line);
 	my $ST = shift(@data);       # Remove the first element (Sequence Type) from the line and store it.
 
@@ -1330,19 +1343,25 @@ sub make_new_schema{
 	}
 	# Otherwise, store the ST number in schema as a value and the line (the ST's corresponding alleles) as a key.
 	else {
+	    
 	    if($max_st_num){
 		$max_st_num = $ST if($ST > $max_st_num);
 	    }else{
 		$max_st_num = $ST;
 	    }
+	    
 	    my $size = scalar @data;
 	    if (($size != ($ST_type_size + $ST_attr_size)) && ($size != $ST_type_size)) {
 		die "ERROR: ST $ST does not have the same number of columns as the header line or the alleles only: $size versus $ST_type_size alleles and $ST_attr_size attributes.\n";
 	    }
+	    
 	    my $st_type = join("\t",@data[0 .. ($ST_type_size - 1)]);
+	    
 	    unless(exists $schema->{$st_type}){
 		$schema->{$st_type} = $ST;
+
 		if ($ST_attr_size > 0) {
+
 		    if ($size != $ST_type_size) {
 			$stAttributes->{$ST} = join("\t", @data[$ST_type_size .. $#data]);
 		    } else {
@@ -1359,39 +1378,55 @@ sub make_new_schema{
 
     #Parses new ST types and stores in hash
     open(my $new_st_fh, "<", $new_st_file);
-
+    
     while(<$new_st_fh>){
+
 	unless($_ =~ /Sample/){
+
 	    chomp $_;
+
 	    my @values = split(/\t/,$_);
 	    (my $sample, my $st_num) = splice(@values,0,2);
 	    my $st_type = join("\t",@values[0 .. ($ST_type_size - 1)]);
 
 	    if ($st_num eq "UNKNOWN") {
+
 		my $skip_bad = 0;
+
 		foreach my $value (@values) {
+
 		    if (($value eq "MISSING") || ($value eq "SHORT")) {
 			$skip_bad = 1;
+
 		    } elsif ($value eq "NEW") {
+
 			$skip_bad = 1;
+
 			print $lfh "|WARNING: no NEW alleles should be found for append_schema option but $sample had type $st_num for ($st_type).\n";
 			print STDERR "WARNING: no NEW alleles should be found for append_schema option but $sample had type $st_num for ($st_type).\n";
+
 		    }
+
 		}
-		if ($skip_bad) {
-		    next;
-		}
+		
+		next if ($skip_bad);
+		
 		unless(exists $schema->{$st_type}){
 		    $max_st_num++;
 		    $schema->{$st_type} = $max_st_num;
 		    $stAttributes->{$max_st_num} = $unknown;
 		}
+		
 	    } else {
+		
 		if ((!defined $schema->{$st_type}) || ($st_num != $schema->{$st_type})) {
 		    die "ERROR: $st_num assigned for ($st_type) not found in $orig_st.\n";
 		}
+		
 	    }
+	    
 	}
+	
     }
 
     #Prints the new ST stypes to the new appended scheme
@@ -1406,17 +1441,20 @@ sub make_new_schema{
 	print $new_fh "\n";
     }
 
-    close $new_st_fh;
+    close $new_fh;
 
     #Write new ST_out w/ new schema numbers
     open ($new_st_fh, "<", $new_st_file);
 
-    while(my $line = <$new_st_fh>){
-
-	chomp $line;
-
+    while(<$new_st_fh>){
+	
+	my $line = $_;
+	$line =~ s/\s+$//;
+	
 	if($line =~ /UNKNOWN/){
+	    
 	    my @values  = split(/\t/,$line);
+	    
 	    (my $sample, my $st_num) = splice(@values,0,2);
 	    my $st_type = join("\t",@values[0 .. ($ST_type_size - 1)]);
 	    my $st_output = join("\t",@values);
