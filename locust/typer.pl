@@ -307,13 +307,13 @@ if($opts{retype}){
 unless($opts{novel_schema}){
     print $lfh "|Step: Combine all genome type files into one\n";
     #Cat all st_files into one
-
+    
     &_cat($sth,$st_files);
     &_cat($nth,$fa_files);
-}
 
-close $sth;
-close $nth;
+    close $sth;
+    close $nth;
+}
 
 #Run st finder on new alleles and add results to original
 #output file
@@ -327,8 +327,7 @@ if($opts{append_schema}){
     #Open combined alleles file
     my $combined_alleles = "$append_outdir/appended_alleles.fa";
     my $cfh = path($combined_alleles)->filehandle(">");
-    print $combined_alleles;
-
+    
     my $nr_file = &clean_fasta_file($opts{alleles},$new_allele_fa,$append_outdir);
 
     #Combined new alleles with initial alleles
@@ -343,6 +342,7 @@ if($opts{append_schema}){
     print $lfh "Running: $cmd\n";
     system($cmd) == 0 || die("ERROR: Problem running $cmd");
 
+    unlink($nr_file); 
     unlink($combined_alleles . "_orig");
     close $cfh;
     
@@ -1398,7 +1398,7 @@ sub make_new_schema{
 		    if (($value eq "MISSING") || ($value eq "SHORT")) {
 			$skip_bad = 1;
 
-		    } elsif ($value eq "NEW") {
+		    } elsif ($value =~ /NEW/) {
 
 			$skip_bad = 1;
 
@@ -1628,7 +1628,7 @@ sub run_seq_type{
 sub clean_fasta_file{
     print $lfh "|Step: Cleaning fasta files and make them non redundant\n";
     my ($old_alleles,$new_alleles,$dir) = @_;
-
+    
     my $allele_numbers = {};
     my $new_file = "$dir/appended_alleles_nr.fa";
 
@@ -1639,15 +1639,16 @@ sub clean_fasta_file{
     while(<$ofh>){
 
 	my $line = $_;
-
+       
 	if($line =~ /^>/){
 
 	    my $allele = $line;
 	    $allele =~ s/^>//;
 	    $allele =~ s/\s.*//;
 	    $allele =~ s/\s+//;
+	    
 	    my ($gene,$identifier) = split(/\_/,$allele, 2);
-
+	    
 	    if($identifier =~ /^NOVEL\d+$/){
 
 		$identifier =~ s/^NOVEL//;
@@ -1661,11 +1662,14 @@ sub clean_fasta_file{
 		    }
 
 		}else{
-
+		  
 		    $allele_numbers->{$gene} = $identifier;
 
 		}
 
+	    }else{
+
+		$allele_numbers->{$gene} = $identifier;
 	    }
 
 	}
@@ -1690,13 +1694,12 @@ sub clean_fasta_file{
 	    $p_allele = $c_allele unless($p_allele);
 
 	    if($current_sequence){
-
+		
 		#Removes newlines and other whiespace to make for one string
 		$current_sequence =~ s/\s+//g;
 
 		unless (exists $unique_sequences->{$current_sequence}->{$p_allele}){
 
-		    print "$p_allele\n";
 		    if(exists $allele_numbers->{$p_allele}){
 
 			$allele_numbers->{$p_allele}++;
@@ -1710,7 +1713,7 @@ sub clean_fasta_file{
 		    $unique_sequences->{$current_sequence}->{$p_allele} = "NOVEL" . $allele_numbers->{$p_allele}; #store unique seq
 
 		}
-
+		
 		$current_sequence = ""; #reset seq variable
 		$p_allele = $c_allele;
 
@@ -1758,9 +1761,10 @@ sub clean_fasta_file{
 	    print $nrfh "$sequence\n";
 
 	}
-
     }
 
+    close $nrfh;
+    
     return($new_file);
 }
 
@@ -1906,7 +1910,8 @@ sub run_st_finder{
 
     # Open Bio::SeqIO object for top_seqs_file.
     my $inQueries = Bio::SeqIO->new(-file => "<$top_seqs_file", -format => "fasta",);
-
+    my $query_count = 1;
+    
     # Parse through the query.
     while (my $query = $inQueries->next_seq) {
 	my $queryName = $query->primary_id;                      # Query name.
@@ -1915,12 +1920,16 @@ sub run_st_finder{
 	#Split name to get queryAllele
 	my($queryAllele,$scheme) = split(/\_/,$queryName,2);
 
-	$allelesFound{$queryAllele}{$queryName} = "NEW";
-	$query_sequences{$queryName} = $querySeq;
-
+	my $unique_id = $queryAllele . ":" . $query_count;
+	
+	$allelesFound{$queryAllele}{$unique_id} = "NEW";
+	$query_sequences{$queryAllele}{$unique_id} = $querySeq;
+	
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
 	if ($querySeq =~ /^SHORT/) {
-	    $allelesFound{$queryAllele}{$queryName} = "SHORT";
+	
+	    $allelesFound{$queryAllele}{$unique_id} = "SHORT";
+	    
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
 
 	    #Note: Different alleles COULD have the same sequence
@@ -1930,10 +1939,12 @@ sub run_st_finder{
 		#(i.e. the query allele name forms the beginning of the MLST allele name),
 		#it is a proper match.
 		if ($mlstAlleleName eq $queryAllele) {
-		    $allelesFound{$queryAllele}{$queryName} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
+		    $allelesFound{$queryAllele}{$unique_id} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
 		}
 	    }
 	}
+
+	$query_count++;
     }
 
     #Determine which alleles have multiple variants
@@ -1962,8 +1973,16 @@ sub run_st_finder{
 	my $count = scalar (@v);
 
 	if($count > 1){
+	    
+	    #Add marking to "NEW" so users know there are multi copies
+	    foreach (keys $allelesFound{$key}){
+		$allelesFound{$key}{$_} =~ s/NEW/NEW_MC/;
+	    }
+	    
 	    push(@multi_variants,\@v);
 	    push(@base_string,"");
+
+	    
 	}else{
 
 	    if(@v){
@@ -1975,13 +1994,13 @@ sub run_st_finder{
 	}
     }
 
-       
     my @variants;
     push @variants, clone(\@base_string);
-
+      
     foreach my $gene(@multi_variants){
 
-	my($base_allele,$gene_schema) = split(/_/,$gene->[0]);
+	my($base_allele,$unique_num) = split(/:/,$gene->[0]);
+     
 	my $values_to_add = scalar(@variants);
 
 	my $size = scalar(@$gene);
@@ -1993,11 +2012,9 @@ sub run_st_finder{
 	my $index = 0;  #increment this until it's time to move on.
 
 	for my $allele ( @$gene ) {
-
-	    #Split allele name to only store scheme number
-	    my($a,$s) = split(/_/,$allele);
+	    	    
 	    my $allele_schema = $allelesFound{$base_allele}{$allele};
-
+	    
 	    while ( $values_added < $values_to_add ) {
 		# Fill the location for allele at this entry
 		$variants[$index][$allele_index] = $allele_schema;
@@ -2022,10 +2039,12 @@ sub run_st_finder{
 
 	#Print new allele sequences to fasta file
 	if(exists $allelesFound{$allele}){
+
 	    foreach my $a(keys $allelesFound{$allele}){
-		if($allelesFound{$allele}{$a} eq 'NEW'){
+
+		if($allelesFound{$allele}{$a} =~ /NEW/){
 		    print $new_alleles_fh ">$allele\n"  unless $new_alleles;
-		    print $new_alleles_fh "$query_sequences{$a}\n" unless $new_alleles;
+		    print $new_alleles_fh "$query_sequences{$allele}{$a}\n" unless $new_alleles;
 		}
 	    }
 	}
