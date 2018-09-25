@@ -44,7 +44,7 @@ open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
 while (<INFILE>) {
 
 	my $line = $_;
-	
+
 	if ($line =~ /^#/) {
 		next;
 	}
@@ -67,28 +67,40 @@ while (<INFILE>) {
 	    $send = $sstart;
 	    $sstart = $tmp;
 	}
-	
+
 	my($queryAllele,$scheme) = split(/\_/,$qid,2);
 
 	#Store hits above 90% id
 	if($percent >= 90){
 	    $ids{$qid}{$sid} = $percent;
 	}
-	
-	if ((! exists $hits{$queryAllele}) || ($lenratio > $toplenratio{$queryAllele}) || (($lenratio == $toplenratio{$queryAllele}) && ($bitscore > $topbitscore{$queryAllele}))) {
-	    
-	    $hits{$queryAllele} = $line;
-	    $coords{$qid}{'start'} = $sstart;
-	    $coords{$qid}{'end'} = $send;
-	    $coords{$qid}{'sid'} = $sid;
-	    $coords{$qid}{'bit'} = $bitscore;
-	    $topbitscore{$queryAllele} = $bitscore;
-	    $toplenratio{$queryAllele} = $lenratio;
 
-	    $multi_copy{$queryAllele}{$qid} = _trim($line);
-	
-	}	
+	if (($lenratio > $toplenratio{$queryAllele}) || ($lenratio == $toplenratio{$queryAllele})) {
+
+	    if($multi_flag){
+
+		    $hits{$queryAllele} = $line;
+		    $coords{$qid}{'start'} = $sstart;
+		    $coords{$qid}{'end'} = $send;
+		    $coords{$qid}{'sid'} = $sid;
+		    $topbitscore{$queryAllele} = $bitscore;
+		    $toplenratio{$queryAllele} = $lenratio;
+
+		    $multi_copy{$queryAllele}{$qid}{$sid} = _trim($line);
+
+	    }elsif((! exists $hits{$queryAllele}) && ($bitscore > $topbitscore{$queryAllele})){
+
+		$hits{$queryAllele} = $line;
+		$coords{$qid}{'start'} = $sstart;
+		$coords{$qid}{'end'} = $send;
+		$coords{$qid}{'sid'} = $sid;
+		$topbitscore{$queryAllele} = $bitscore;
+		$toplenratio{$queryAllele} = $lenratio;
+
+	    }
+	}
 }
+
 
 my @alleles = (keys %coords);
 my $overlap_alleles;
@@ -99,7 +111,7 @@ for my $i (0 .. $#alleles) {
     my $end1 = $coords{$allele1}{'end'};
     my $sid1 = $coords{$allele1}{'sid'};
     my $length1 = ($end1 - $start1) + 1;
-   
+
     for my $j (($i + 1) .. $#alleles) {
 	my $allele2 = $alleles[$j];
 	my $start2 = $coords{$allele2}{'start'};
@@ -107,7 +119,7 @@ for my $i (0 .. $#alleles) {
 	my $sid2 = $coords{$allele2}{'sid'};
 	my $length2 = ($end2 - $start2) + 1;
 	my $overlap;
-	
+
 	if (($sid1 eq $sid2) && ($start2 < $end1) && ($end2 > $start1)) {#different alleles have overlapping matches in the genome
 	    if ($end2 < $end1) {
 		if ($start2 < $start1) {
@@ -136,7 +148,7 @@ for my $i (0 .. $#alleles) {
 		    my $a1bit = $coords{$allele1}{'bit'};
 		    my $a2bit = $coords{$allele2}{'bit'};
 
-		  
+
 		    if($a1bit > $a2bit){
 			print STDOUT "INFO: Bit Score for $allele1 greater than $allele2. Treating $allele1 as true hit\n\n";
 			$hits{$allele2} = undef;
@@ -152,11 +164,11 @@ for my $i (0 .. $#alleles) {
 
 		    #Remove overlapping multi copy alleles
 		    if($a1bit > $a2bit){
-			$multi_copy{$a2}{$allele2} = undef if(exists $multi_copy{$a2}{$allele2});
+			$multi_copy{$a2}{$allele2}{$sid2} = undef if(exists $multi_copy{$a2}{$allele2}{$sid2});
 		    }else{
-			$multi_copy{$a1}{$allele1} = undef if(exists $multi_copy{$a1}{$allele1});
+			$multi_copy{$a1}{$allele1}{$sid1} = undef if(exists $multi_copy{$a1}{$allele1}{$sid1});
 		    }
-		    
+
 		}
 	    }
 	}
@@ -176,29 +188,35 @@ foreach my $gene(keys %multi_copy){
 
     my $number = scalar keys $multi_copy{$gene};
 
-    if($number > 1){
-	print "Possible Multi Copy Gene: $gene\n";
+    foreach (keys $multi_copy{$gene}){
+	my $number = scalar keys $multi_copy{$gene}{$_};
+
+	if($number > 1 && (defined $multi_copy{$gene}{$_})){
+	    print "Possible Multi Copy Gene: $gene\n";
+	}
     }
 
     foreach my $a(keys $multi_copy{$gene}){
-	    
-	if(defined $multi_copy{$gene}{$a}){
-	   
-	    my($allele,$schema) = split(/_/,$a);
-	    
-	    #If allele is above 90%(hits stored in $ids)
-	    if(exists $ids{$a}){
 
-		my $hit = $multi_copy{$allele}{$a};
-		
-		print  "$hit\n";
-		
-		# IF FLAG PRINT TO HITS FILE
-		# Don't print the hit that was the top hit as that was
-		# already printed
-		
-		if($multi_flag){
-		    print OUTFILE "$hit\n" unless (_trim($hits{$gene}) eq _trim($hit));
+	foreach my $s(keys $multi_copy{$gene}{$a}){
+
+	    if(defined $multi_copy{$gene}{$a}{$s}){
+
+		my($allele,$schema) = split(/_/,$a);
+
+		#If allele is above 90%(hits stored in $ids)
+		if(exists $ids{$a}{$s}){
+		    my $hit = $multi_copy{$allele}{$a}{$s};
+
+		    print  "$hit\n";
+
+		    # IF FLAG PRINT TO HITS FILE
+		    # Don't print the hit that was the top hit as that was
+		    # already printed
+
+		    if($multi_flag){
+			print OUTFILE "$hit\n" unless (_trim($hits{$gene}) eq $hit);
+		    }
 		}
 	    }
 	}
