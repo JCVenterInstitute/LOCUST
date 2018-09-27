@@ -22,7 +22,8 @@ use Cwd;
 use Data::Dumper;
 
 my $inputfile = $ARGV[0];
-my $multi_flag = $ARGV[1];
+my $multi_file = $ARGV[1];
+my $multi_flag = $ARGV[2];
 
 my @file_part = split ('/', $inputfile);
 my ($genome, $ext) = split ('_hits.', $file_part[-1], 2);
@@ -40,6 +41,7 @@ my %multi_copy = ();
 
 open (INFILE, $inputfile) || die "Can't open $inputfile: $!";
 open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
+open (my $MULTI_FILE_FH, ">$multi_flag") if ($multi_file);
 
 while (<INFILE>) {
 
@@ -76,6 +78,8 @@ while (<INFILE>) {
 	}
 	
 	if (($lenratio > $toplenratio{$queryAllele}) || ($lenratio == $toplenratio{$queryAllele})) {
+
+	    $multi_copy{$queryAllele}{$qid}{$sid} = _trim($line);
 	    
 	    if($multi_flag){
        
@@ -85,8 +89,6 @@ while (<INFILE>) {
 		    $coords{$qid}{'sid'} = $sid;
 		    $topbitscore{$queryAllele} = $bitscore;
 		    $toplenratio{$queryAllele} = $lenratio;
-
-		    $multi_copy{$queryAllele}{$qid}{$sid} = _trim($line);
 		    
 	    }elsif((! exists $hits{$queryAllele}) && ($bitscore > $topbitscore{$queryAllele})){
 		
@@ -98,7 +100,10 @@ while (<INFILE>) {
 		$toplenratio{$queryAllele} = $lenratio;
 		
 	    }
+
+	    
 	}
+
 }
 
 
@@ -185,12 +190,11 @@ for my $key (keys %hits) {
 foreach my $gene(keys %multi_copy){
 
     my $number = scalar keys $multi_copy{$gene};
-
     foreach (keys $multi_copy{$gene}){
 	my $number = scalar keys $multi_copy{$gene}{$_};
 
 	if($number > 1 && (defined $multi_copy{$gene}{$_})){
-	    print "Possible Multi Copy Gene: $gene\n";
+	    print $MULTI_FILE_FH "$gene\n";
 	}
     }
    
@@ -206,7 +210,7 @@ foreach my $gene(keys %multi_copy){
 		if(exists $ids{$a}{$s}){
 		    my $hit = $multi_copy{$allele}{$a}{$s};
 		    
-		    print  "$hit\n";
+		    print $MULTI_FILE_FH "$hit\n";
 		    
 		    # IF FLAG PRINT TO HITS FILE
 		    # Don't print the hit that was the top hit as that was
