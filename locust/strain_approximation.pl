@@ -3,23 +3,24 @@ use strict;
 use Pod::Usage;
 use Data::Dumper;
 use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
-
+use List::Util;
 #Collect Inputs
 =head1 NAME
 
 strain_approximation.pl -  A script to approximate ST's using Multiple Sequence
                            Alignments and the Kimura distance between these
                            alignments.
-
 =head1 SYNOPSIS
 
   USAGE: strain_approximation.pl
-   --input_file <ST Output File from Locust>
-                          --help
+   --typer_input_file <Sequence File List (-i option from typer.pl)>
+	 --st_results <ST_all.out file from a finished typer run>
+	 --help
 
 =head1 OPTIONS
+B<--typer_input_file, i> : Sequence File List
 
-B<--input_file, i>   : ST_all.out file from typer.pl run.
+B<--st_results, s>   : ST_all.out file from typer.pl run.
 
 B<--help, h>         : Display this help message.
 
@@ -37,18 +38,42 @@ This program uses assigned ST's to approximate an ST for those assigned "NEW".
 my %opts;
 GetOptions(\%opts,
 	'help|h',
-	'input_file|i=s',
+	'typer_input_file|i=s',
+	'st_results|s=s',
 ) || die "Error getting options! $!";
 
 pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 
-my $stfile = "ST_all.out"
+my $stfile = $opts{st_results};
+my $typer_input_file = $opts{typer_input_file};
 
+my (@header, %st_designations);
+open(my $st, '<', $stfile) or die "Couldn't open $stfile\n";
+my $header_seen = 0;
+while (<$st>){
+	my $line = $_;
+	if ($header_seen == 0){
+		@header = split("\t",$line);
+		$header_seen = 1;
+} else {
+		my @line_values = split("\t", $line);
+		chomp @line_values;
+		$st_designations{$line_values[0]} = join("\t", @line_values[1 .. $#line_values]);
+	}
+}
 
-
-
-
-
+my %attributeHash;
+open(my $th, '<', $typer_input_file) or die "Couldn't open $typer_input_file\n";
+while (<$th>){
+	my $line = $_;
+	chomp $line;
+	my @line_values = split(/\t/,$line,3);
+	my $genome = $line_values[0];
+	my $path = $line_values[1];
+	my $genomeAttributes = $line_values[2] if $line_values[2];
+	$genomeAttributes =~ s/^\s+|\s+$//g;
+	$attributeHash{$genome} = $genomeAttributes;
+}
 
 #Run muscle to create aligned
 my $aligned_file = "allGenomesJoinedAlleles.fasta";
@@ -121,7 +146,7 @@ for (my $matrix_row = 1; $matrix_row <= $num_of_genomes; $matrix_row ++){
 }
 
 #Hash of Genome to Best Hit(s)
-my %best_hits;
+my %out_st_line;
 #Generate Sorted Arrays of Hits and Values (smallest -> largest)
 for (my $i = 0; $i < $#row_hashes; $i++){
   my %row_hash = %{$row_hashes[$i]};
@@ -129,20 +154,48 @@ for (my $i = 0; $i < $#row_hashes; $i++){
   my @hit_names;
   my @hit_values;
   my $best_hit = 10000; #Arbitrarily High
-  my @best_hits;
   foreach my $hit_name (sort {$row_hash{$a} <=> $row_hash{$b} } keys %row_hash){
     push @hit_names, $genome_idx{$hit_name};
     push @hit_values, $row_hash{$hit_name};
-    if ($row_hash{$hit_name} < $best_hit){
-      $best_hit = $row_hash{$hit_name};
-      push @best_hits, $genome_idx{$hit_name};
-    } elsif ($row_hash{$hit_name} == $best_hit){
-      push @best_hits, $genome_idx{$hit_name};
-    }
   }
-  $best_hits{$genome} = \@best_hits;
   my $out_file = $genome . "/" . $genome . "_sorted_distances.txt";
   open(my $of, ">", $out_file) or die "Couldn't open file $out_file.\n";
     print $of join("\t", @hit_names) . "\n";
     print  $of join("\t", @hit_values) . "\n";
+	my @allele_calls = split("\t", $st_designations{$genome});
+	my $st_call = $allele_calls[0];
+	my @best_hits;
+	my @possible_indices;
+	for (my $i = 0; $i < $#hit_values; $i++){
+		 	my $hit_name = $hit_names[$i];
+			if ($attributeHash{$hit_name}){ #If current hit name has a defined 3rd column of metadata
+				push @possible_indices, $i;
+		}
+ }
+ my $best_val = 10000; #arbitrary
+ for my $val (@possible_indices){
+	 		if ($hit_values[$val] <= $best_val){
+				$best_val = $hit_values[$val];
+				my $my_out_val = $hit_names[$val];
+				$my_out_val =~ s/^\s+|\s+$//g;
+				push @best_hits, $my_out_val;
+			}
+		}
+	my $combined_best_hits = join("/", @best_hits);
+ 	push (@allele_calls, $combined_best_hits);
+	my $joined_allele_calls = join("\t", @allele_calls);
+	chomp $joined_allele_calls;
+	chomp $genome;
+  $out_st_line{$genome} = $joined_allele_calls;
+}
+
+
+#Write results
+my $out_st_file = "ST_approx.out";
+open(my $of, ">", $out_st_file) or die "Couldn't open file $out_st_file.\n";
+my $header = join("\t", @header);
+chomp $header;
+print $of $header . "\tST Approximations\n";
+while (my ($key, $value) = each %out_st_line){
+	print $of "$key\t$value\n";
 }
