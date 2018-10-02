@@ -303,7 +303,6 @@ if($opts{retype}){
     ($st_files,$fa_files,$top_seqs_files,$multi_copy_logs) = run_seq_type($input_file);
 }
 
-
 #Cat all output files from each genome to into final output
 unless($opts{novel_schema}){
     print $lfh "|Step: Combine all genome type files into one\n";

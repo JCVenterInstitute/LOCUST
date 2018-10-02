@@ -41,7 +41,7 @@ my %multi_copy = ();
 
 open (INFILE, $inputfile) || die "Can't open $inputfile: $!";
 open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
-open (my $MULTI_FILE_FH, ">$multi_flag") if ($multi_file);
+open (my $MULTI_FILE_FH, ">$multi_file") if ($multi_file);
 
 while (<INFILE>) {
 
@@ -187,19 +187,18 @@ for my $key (keys %hits) {
 #Sort through same gene hits above 90%
 #If they are not marked as an overlap
 #Then print them as multi gene
+print $MULTI_FILE_FH "#Genome: $genome\n";
+
 foreach my $gene(keys %multi_copy){
 
     my $number = scalar keys $multi_copy{$gene};
-    foreach (keys $multi_copy{$gene}){
-	my $number = scalar keys $multi_copy{$gene}{$_};
-
-	if($number > 1 && (defined $multi_copy{$gene}{$_})){
-	    print $MULTI_FILE_FH "$gene\n";
-	}
+    
+    if($number > 1){
+	print $MULTI_FILE_FH "#Allele: $gene\n";
     }
-   
+    
     foreach my $a(keys $multi_copy{$gene}){
-	    
+			
 	foreach my $s(keys $multi_copy{$gene}{$a}){
 
 	    if(defined $multi_copy{$gene}{$a}{$s}){
@@ -210,12 +209,13 @@ foreach my $gene(keys %multi_copy){
 		if(exists $ids{$a}{$s}){
 		    my $hit = $multi_copy{$allele}{$a}{$s};
 		    
-		    print $MULTI_FILE_FH "$hit\n";
+		    if($number > 1){
+			print $MULTI_FILE_FH "$hit\n";
+		    }
 		    
 		    # IF FLAG PRINT TO HITS FILE
 		    # Don't print the hit that was the top hit as that was
 		    # already printed
-
 		    if($multi_flag){
 			print OUTFILE "$hit\n" unless (_trim($hits{$gene}) eq $hit);
 		    }
