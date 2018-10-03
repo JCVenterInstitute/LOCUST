@@ -36,7 +36,6 @@ my %hits = ();
 my %coords = ();
 my %topbitscore = ();
 my %toplenratio = ();
-my %ids = ();
 my %multi_copy = ();
 
 open (INFILE, $inputfile) || die "Can't open $inputfile: $!";
@@ -72,12 +71,10 @@ while (<INFILE>) {
 
 	#Store hits above 90% id
 	if($percent >= 90){
-	    $ids{$queryAllele}{$qid}{$sid} = $percent;
+	    $multi_copy{$queryAllele}{$qid .":" . $sid} = _trim($line);
 	}
 	
 	if (($lenratio > $toplenratio{$queryAllele}) || ($lenratio == $toplenratio{$queryAllele})) {
-
-	    $multi_copy{$queryAllele}{$qid .":" . $sid} = _trim($line);
 	   	    
 	    if($multi_flag){
        
@@ -182,26 +179,14 @@ for my $key (keys %hits) {
 #If they are not marked as an overlap
 #Then print them as multi gene
 my $print_g = 0;
-my $number = 0;
 
 foreach my $gene(keys %multi_copy){
 
     my $print_a = 0;
 
     #my $number = scalar keys $multi_copy{$gene};
-    my $number =0;
+    my $number = scalar keys $multi_copy{$gene};
     
-    #loop first to find true count of real multi_copy hits above 90
-    foreach my $id(keys $multi_copy{$gene}){
-	my ($allele,$sid) = split(":",$id);
-	
-	if(defined $multi_copy{$gene}{$id}){
-	    if(exists $ids{$gene}{$allele}{$sid}){
-		$number++;
-	    }
-	}
-    }
-
     #Now loop and print information if there are multi copy
     if($number > 1){
 
@@ -210,32 +195,29 @@ foreach my $gene(keys %multi_copy){
 	    my($a,$qid) = split(":",$id);
 	    
 	    if(defined $multi_copy{$gene}{$id}){
-	
-		#If allele is above 90%(hits stored in $ids)
-		if(exists $ids{$gene}{$a}{$qid}){
-		    
-		    my $hit = $multi_copy{$gene}{$id};
 		
-		    #print header if necessary
-		    print $MULTI_FILE_FH "#Genome: $genome\n" unless $print_g;
-		    print $MULTI_FILE_FH "#Allele: $gene\n" unless $print_a;
-		    $print_a=1;
-		    $print_g=1;
-			
-		    #print hit
-		    print $MULTI_FILE_FH "$hit\n";
-		    		    
-		    # IF FLAG PRINT TO HITS FILE
-		    # Don't print the hit that was the top hit as that was
-		    # already printed
-		    if($multi_flag){
-			print OUTFILE "$hit\n" unless (_trim($hits{$gene}) eq $hit);
-		    }
+		my $hit = $multi_copy{$gene}{$id};
+		
+		#print header if necessary
+		print $MULTI_FILE_FH "#Genome: $genome\n" unless $print_g;
+		print $MULTI_FILE_FH "#Allele: $gene\n" unless $print_a;
+		$print_a=1;
+		$print_g=1;
+		
+		#print hit
+		print $MULTI_FILE_FH "$hit\n";
+		
+		# IF FLAG PRINT TO HITS FILE
+		# Don't print the hit that was the top hit as that was
+		# already printed
+		if($multi_flag){
+		    print OUTFILE "$hit\n" unless (_trim($hits{$gene}) eq $hit);
 		}
 	    }
 	}
     }
 }
+
 close (INFILE);
 close (OUTFILE);
 
