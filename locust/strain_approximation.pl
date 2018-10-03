@@ -73,7 +73,9 @@ while (<$th>){
 	my $path = $line_values[1];
 	$attributeHash{$genome} = "";
 	my $genomeAttributes = $line_values[2];
-	$genomeAttributes =~ s/^\s+|\s+$//g;
+	if ($genomeAttributes ne ""){
+		$genomeAttributes =~ s/^\s+|\s+$//g;
+  }
 	$attributeHash{$genome} = $genomeAttributes;
 }
 
@@ -238,10 +240,10 @@ while (my ($key, $value) = each %out_st_line){
 }
 
 my $out_st_file = "ST_all.out";
-open(my $of, ">", $out_st_file) or die "Couldn't open file $out_st_file.\n";
-my $header = join("\t", @header);
-chomp $header;
-print $of $header . "\tBest Hit\n";
+open(my $of1, ">", $out_st_file) or die "Couldn't open file $out_st_file.\n";
+my $header1 = join("\t", @header);
+chomp $header1;
+print $of1 $header1 . "\tBest Hit\n";
 while (my ($key, $value) = each %st_all_out){
-	print $of "$key\t$value\n";
+	print $of1 "$key\t$value\n";
 }
