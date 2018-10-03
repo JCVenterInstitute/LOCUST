@@ -80,7 +80,7 @@ while (<$th>){
 #Run muscle to create aligned
 my $aligned_file = "allGenomesJoinedAlleles.fasta";
 my $distmat_out = "allGenomesJoinedAlleles.distmat";
-my $distmat_command = "distmat -nucmethod 2 -outfile $distmat_out $aligned_file";
+my $distmat_command = "distmat -nucmethod 0 -outfile $distmat_out $aligned_file";
 system($distmat_command) == 0 || die "\n";
 
 my @n_by_n_distance_array;
@@ -138,7 +138,7 @@ for (my $matrix_row = 1; $matrix_row <= $num_of_genomes; $matrix_row ++){
   for (my $col = 0; $col < $num_of_genomes; $col++){
       my $row_value = abs($n_by_n_distance_array[$matrix_row][$col]);
       $row_values{$col} = $row_value;
-    
+
   }
   push (@row_hashes, \%row_values);
 }
@@ -232,7 +232,7 @@ my $out_approx_file = "ST_approx.out";
 open(my $of, ">", $out_approx_file) or die "Couldn't open file $out_approx_file.\n";
 my $header = join("\t", @header);
 chomp $header;
-print $of $header . "\tBest Hit\tBest Kimura Distance\tBest Sequence Type\tBest Proxy/Type Strain\tSecond Best Hit\tSecond Best Kimura Distance\tSecond Best Sequence Type\tSecond Best Proxy/Type Strain\n";
+print $of $header . "\tBest Hit\tBest Distance\tBest Sequence Type\tBest Proxy/Type Strain\tSecond Best Hit\tSecond Best Distance\tSecond Best Sequence Type\tSecond Best Proxy/Type Strain\n";
 while (my ($key, $value) = each %out_st_line){
 	print $of "$key\t$value\n";
 }
