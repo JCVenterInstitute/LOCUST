@@ -72,11 +72,10 @@ while (<$th>){
 	my $genome = $line_values[0];
 	my $path = $line_values[1];
 	$attributeHash{$genome} = "";
-	my $genomeAttributes = $line_values[2];
-	if ($genomeAttributes ne ""){
-		$genomeAttributes =~ s/^\s+|\s+$//g;
-  }
-	$attributeHash{$genome} = $genomeAttributes;
+	if ($line_values[2]){
+		$line_values[2] =~ s/^\s+|\s+$//g;
+		$attributeHash{$genome} = $line_values[2];
+	}
 }
 
 #Run muscle to create aligned
