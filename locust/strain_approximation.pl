@@ -47,7 +47,7 @@ pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 my $stfile = $opts{st_results};
 my $typer_input_file = $opts{typer_input_file};
 
-my (@header, %st_designations);
+my (@header, %st_designations, %st_calls);
 open(my $st, '<', $stfile) or die "Couldn't open $stfile\n";
 my $header_seen = 0;
 while (<$st>){
@@ -59,6 +59,7 @@ while (<$st>){
 		my @line_values = split("\t", $line);
 		chomp @line_values;
 		$st_designations{$line_values[0]} = join("\t", @line_values[1 .. $#line_values]);
+		$st_calls{$line_values[0]} = $line_values[1];
 	}
 }
 
@@ -70,7 +71,8 @@ while (<$th>){
 	my @line_values = split(/\t/,$line,3);
 	my $genome = $line_values[0];
 	my $path = $line_values[1];
-	my $genomeAttributes = $line_values[2] if $line_values[2];
+	$attributeHash{$genome} = "";
+	my $genomeAttributes = $line_values[2];
 	$genomeAttributes =~ s/^\s+|\s+$//g;
 	$attributeHash{$genome} = $genomeAttributes;
 }
@@ -126,9 +128,6 @@ for (my $row_idx = 1; $row_idx <= $num_of_genomes; $row_idx++){ #row_idx 0 is th
   }
 }
 
-#Look at all genomes for matches? Or just those that are Type Strain representatives?
-#Look at only genomes that have length within N bases of longest sequence? Avoid those that are SHORT or MISSING?
-
 #Now iterate over each row to get closest
 my @row_hashes;
 for (my $matrix_row = 1; $matrix_row <= $num_of_genomes; $matrix_row ++){
@@ -137,21 +136,21 @@ for (my $matrix_row = 1; $matrix_row <= $num_of_genomes; $matrix_row ++){
   my $genome = $genome_idx{$genome_being_examined};
   #Iterate over values in row
   for (my $col = 0; $col < $num_of_genomes; $col++){
-    if ($col != $genome_being_examined){
       my $row_value = abs($n_by_n_distance_array[$matrix_row][$col]);
       $row_values{$col} = $row_value;
-    }
+    
   }
   push (@row_hashes, \%row_values);
 }
 
 #Hash of Genome to Best Hit(s)
 my %out_st_line;
+my %st_all_out;
 #Generate Sorted Arrays of Hits and Values (smallest -> largest)
 for (my $i = 0; $i < $#row_hashes; $i++){
   my %row_hash = %{$row_hashes[$i]};
   my $genome = $genome_idx{$i};
-  my @hit_names;
+	my @hit_names;
   my @hit_values;
   my $best_hit = 10000; #Arbitrarily High
   foreach my $hit_name (sort {$row_hash{$a} <=> $row_hash{$b} } keys %row_hash){
@@ -163,8 +162,8 @@ for (my $i = 0; $i < $#row_hashes; $i++){
     print $of join("\t", @hit_names) . "\n";
     print  $of join("\t", @hit_values) . "\n";
 	my @allele_calls = split("\t", $st_designations{$genome});
+	my @st_array = @allele_calls;
 	my $st_call = $allele_calls[0];
-	my @best_hits;
 	my @possible_indices;
 	for (my $i = 0; $i < $#hit_values; $i++){
 		 	my $hit_name = $hit_names[$i];
@@ -172,30 +171,77 @@ for (my $i = 0; $i < $#row_hashes; $i++){
 				push @possible_indices, $i;
 		}
  }
- my $best_val = 10000; #arbitrary
+ my %possible_hit_info;
  for my $val (@possible_indices){
-	 		if ($hit_values[$val] <= $best_val){
-				$best_val = $hit_values[$val];
-				my $my_out_val = $hit_names[$val];
-				$my_out_val =~ s/^\s+|\s+$//g;
-				push @best_hits, $my_out_val;
-			}
+	 			my $genome = $hit_names[$val];
+				my $dist = $hit_values[$val];
+				push (@{$possible_hit_info{$dist}}, $genome);
+ }
+	my %best_hit;
+	my %second_best_hit;
+	my $count = 0;
+	foreach my $val (sort {$a <=> $b} keys %possible_hit_info){
+		$count = $count + 1;
+		if ($count == 1){
+			$best_hit{$val} = $possible_hit_info{$val};
+	} elsif ($count == 2){
+		$second_best_hit{$val} = $possible_hit_info{$val};
+	}
+}
+	my $best_hit_val = (keys %best_hit)[0];
+	my @best_hits = (values %best_hit)[0];
+	my $second_best_hit_val = (keys %second_best_hit)[0];
+	my @second_best_hits = (values %second_best_hit)[0];
+	my @best_hit_names;
+	my @best_hits_sts;
+	my @best_hit_attribute;
+	my @second_best_hit_names;
+	my @second_best_hits_sts;
+	my @second_best_hit_attribute;
+	foreach my $hit_list (@best_hits){
+		foreach my $hit (@{$hit_list}){
+			push(@best_hit_names, $hit);
+			push(@best_hits_sts, $st_calls{$hit});
+			push(@best_hit_attribute, $attributeHash{$hit});
 		}
-	my $combined_best_hits = join("/", @best_hits);
- 	push (@allele_calls, $combined_best_hits);
+	}
+	foreach my $hit_list (@second_best_hits){
+		foreach my $hit (@{$hit_list}){
+			push (@second_best_hit_names, $hit);
+			push(@second_best_hits_sts, $st_calls{$hit});
+			push(@second_best_hit_attribute, $attributeHash{$hit});
+		}
+	}
+	push (@allele_calls, join("/", @best_hit_names));
+	push (@allele_calls, $best_hit_val);
+	push (@allele_calls, join("/", @best_hits_sts));
+	push (@allele_calls, join("/", @best_hit_attribute));
+	push (@st_array, join("/", @best_hit_attribute));
+	push (@allele_calls, join("/", @second_best_hit_names));
+	push (@allele_calls, $second_best_hit_val);
+	push (@allele_calls, join("/", @second_best_hits_sts));
+	push (@allele_calls, join("/", @second_best_hit_attribute));
 	my $joined_allele_calls = join("\t", @allele_calls);
-	chomp $joined_allele_calls;
-	chomp $genome;
-  $out_st_line{$genome} = $joined_allele_calls;
+	my $joined_st_array = join("\t", @st_array);
+	$out_st_line{$genome} = $joined_allele_calls;
+	$st_all_out{$genome} = $joined_st_array;
 }
 
-
 #Write results
-my $out_st_file = "ST_approx.out";
+my $out_approx_file = "ST_approx.out";
+open(my $of, ">", $out_approx_file) or die "Couldn't open file $out_approx_file.\n";
+my $header = join("\t", @header);
+chomp $header;
+print $of $header . "\tBest Hit\tBest Kimura Distance\tBest Sequence Type\tBest Proxy/Type Strain\tSecond Best Hit\tSecond Best Kimura Distance\tSecond Best Sequence Type\tSecond Best Proxy/Type Strain\n";
+while (my ($key, $value) = each %out_st_line){
+	print $of "$key\t$value\n";
+}
+
+my $out_st_file = "ST_all.out";
 open(my $of, ">", $out_st_file) or die "Couldn't open file $out_st_file.\n";
 my $header = join("\t", @header);
 chomp $header;
-print $of $header . "\tST Approximations\n";
-while (my ($key, $value) = each %out_st_line){
+print $of $header . "\tBest Hit\n";
+while (my ($key, $value) = each %st_all_out){
 	print $of "$key\t$value\n";
 }
