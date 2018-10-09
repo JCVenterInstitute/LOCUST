@@ -1122,7 +1122,7 @@ sub create_novel_files{
 		    if ($current_sequence  =~ /^SHORT/) {
 
 			#Store allele SHORT for this genome
-			$genome_st->{$genome}->{$values[0]}->{$unique_id} = "SHORT";
+			$genome_st->{$genome}->{$values[0]}->{$values[0]. ":" . $unique_id} = "SHORT";
 
 		    }else{
 
@@ -1196,7 +1196,7 @@ sub create_novel_files{
 	    }
 	}
     }
-    
+
     #Sort allele and genome names to ensure proper ordering
     my @alleles = sort keys %$allele_number;
     @genome_names = sort @genome_names;
@@ -1250,6 +1250,7 @@ sub print_novel_schema{
     
     #Determine which alleles have multiple variants
     foreach my $genome(@$genome_names){
+	
 	my %locations;
 	my $location_count = 0;
 	my @multi_variants;
