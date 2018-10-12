@@ -63,6 +63,8 @@ while (<$st>){
 	}
 }
 
+my $type_strains = 0;
+
 my %attributeHash;
 open(my $th, '<', $typer_input_file) or die "Couldn't open $typer_input_file\n";
 while (<$th>){
@@ -73,11 +75,14 @@ while (<$th>){
 	my $path = $line_values[1];
 	$attributeHash{$genome} = "";
 	if ($line_values[2]){
+		$type_strains++;
 		$line_values[2] =~ s/^\s+|\s+$//g;
 		$attributeHash{$genome} = $line_values[2];
 	}
 }
-
+if ($type_strains < 2){
+	print "ERROR: There are too few defined type strains from the input. Can't approximate type strain.\n";
+} else {
 #Run muscle to create aligned
 my $aligned_file = "allGenomesJoinedAlleles.fasta";
 my $distmat_out = "allGenomesJoinedAlleles.distmat";
@@ -245,4 +250,5 @@ chomp $header1;
 print $of1 $header1 . "\tBest Hit\n";
 while (my ($key, $value) = each %st_all_out){
 	print $of1 "$key\t$value\n";
+}
 }
