@@ -78,6 +78,8 @@ B<--download_schema>	: Download Schema and Alleles from PubMLST. Provide an orga
 
 B<--tree, t>         : Type of tree building. Options: raxml,fasttree
 
+B<--exclude_genomes> : Skips including genomes with short/missing alleles when building a tree.
+
 B<--config, c>       : Config file to point to locally installed third party tools
 
 B<--org_search>      : Term to be used to limit NCBI search based on the organism field in the assembly summary file.
@@ -177,6 +179,7 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'schema_alleles=i',
 	    'config|c=s',
 	    'tree|t=s',
+			'exclude_genomes',
 	    'org_search=s',
 	    'genome_type=s',
 	    'biosample_list=s',
@@ -365,13 +368,6 @@ if($opts{append_schema}){
 
 }
 
-if($opts{tree}){
-    my $tree_input_file;
-    $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
-    &create_tree($opts{tree},$tree_input_file);
-
-}
-
 #&remove_short_seq_stubs($top_seqs_files);
 
 unless($opts{skip_itol}){
@@ -384,6 +380,13 @@ unless($opts{skip_itol}){
 		$st_file = "$OUTPUT/ST_all.out";
 	}
 	&create_itol_file($st_file);
+}
+
+if($opts{tree}){
+    my $tree_input_file;
+    $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
+    &create_tree($opts{tree},$tree_input_file);
+		&strain_approximation()
 }
 
 &cleanup_files;
@@ -768,6 +771,17 @@ sub create_tree{
     print $lfh "Running: $cmd\n";
     system($cmd);
 }
+
+sub strain_approximation{
+
+	print $lfh "|Step: Generating st approximations.\n";
+
+	my $cmd = "perl $Bin/strain_approximation.pl";
+	$cmd .= " -i $opts{input_file}";
+	$cmd .= " -s ST_all.out";
+	system($cmd) == 0 || die("ERROR: $cmd failed");
+}
+
 sub median{
     my @vals = sort {$a <=> $b} @_;
     my $len = @vals;

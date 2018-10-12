@@ -189,7 +189,7 @@ while (<INFILE>) {
 	# e.g., gi|410113282|emb|CANR01000151.1|  ==> pipe characters break the script
 
 	#Only pull sequences that have max_mismatch or less number of nucleotides that can be not matched on either end of the blast alignment
-	if(!$short){
+  if(!$short){
 	    my $cutFasta = "$Bin/cutFasta -f $tokens[0] -x $tokens[8] -y $tokens[9] ";
 	    $cutFasta .= "-s \"$tokens[1]\" $fastafile";
 
@@ -198,44 +198,44 @@ while (<INFILE>) {
 
 	    my @seqlines = `$cutFasta`;
       my $header = $seqlines[0];
-      chomp $header;
       my $fasta_sequence = join("", @seqlines[1 .. $#seqlines]);
-      my $seq_str = $header . "\n" . $fasta_sequence . "\n";
-      open(my $stringfh, "<", \$seq_str) or die "Could not open string for reading: $!";
-      my $seqio = Bio::SeqIO-> new(-fh => $stringfh,
-                                   -format => "fasta",);
-       while(my $seqout = $seqio->next_seq){
-         $seqout->verbose(0);
-         my $nuc_length = $seqout->length;
-         my $prot_seq = $seqout->translate(-codontable_id => 11,);
-         my $prot_length = $prot_seq->length;
-         my $translated_seq = $prot_seq->seq;
-       if ((int($nuc_length / 3) == $prot_length) && (index($translated_seq, "*") + 1 == $prot_length)) {
-    	    for my $seq (@seqlines) {
+      my $fasta_entry = $header . $fasta_sequence;
 
-    		#print $seq;
-    	    print OUTFILE $seq;
-    	    print LOGFILE $seq;
-    	    }
-    	} elsif (index($translated_seq, "*") != -1){
-        if (-e $pepfile){
+      open(my $stringfh, "<", \$fasta_entry) or die "Couldn't open sequence for reading: $!";
+      my $seqio = Bio::SeqIO->new(
+                                  -fh => $stringfh,
+                                  -format => "fasta",
+                                  );
+      #Only 1 sequence
+      my $sequence = $seqio->next_seq;
+      my $translated_sequence = $sequence->translate(
+                                                    -codontable_id => 11,
+                                                    );
+      my $nuc_length = $sequence->length;
+      my $prot_length = $translated_sequence->length;
+
+      my $pred_prot_seq = int($nuc_length / 3);
+      if (-e $pepfile){
           open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
         } else {
           open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
         }
-          print OUTFILE ">$tokens[0]\n";
-          print OUTFILE "PSEUDO\n";
-          print LOGFILE "WARN: Printed PSEUDO as sequence because one it was a full length nucleotide hit that translated with a premature stop codon.\n";
-          print PEPFILE ">$tokens[0]\n";
-          print PEPFILE $prot_seq->seq . "\n";
-          print LOGFILE $prot_seq;
-          close (PEPFILE);
-        } else {
-          print OUTFILE ">$tokens[0]\n";
-          print OUTFILE "NEW\n";
-          print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit without a truncation event.\n";
-        }
-      }
+        print PEPFILE $header;
+        print PEPFILE $translated_sequence->seq . "\n";
+        close(PEPFILE);
+      if ($pred_prot_seq == $prot_length){
+  	    for my $seq (@seqlines) {
+  		      #print $seq;
+  	    print OUTFILE $seq;
+  	    print LOGFILE $seq;
+  	    }
+    } else {
+
+        print OUTFILE "$header\n";
+        print OUTFILE "PSEUDO\n";
+        print LOGFILE "WARN: Printed PSEUDO as sequence because it had a premature stop when translated.\n";
+
+    }
 } else {
   if (($tokens[8] == $tokens[13]) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
