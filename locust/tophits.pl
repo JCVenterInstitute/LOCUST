@@ -47,7 +47,7 @@ while (<INFILE>) {
 	my $line = $_;
 	
 	next if ($line =~ /^#/);
-	
+
 	my @tokens = split("\t", $line);
 	my $qid = _trim($tokens[0]);
 	my $sid = _trim($tokens[1]);
@@ -66,34 +66,34 @@ while (<INFILE>) {
 	    $send = $sstart;
 	    $sstart = $tmp;
 	}
-	
+
 	my($queryAllele,$scheme) = split(/\_/,$qid,2);
 
 	#Store hits above 90% id
 	if($percent >= 90){
 	    $multi_copy{$queryAllele}{$qid .":" . $sid} = _trim($line);
 	}
-	
+
 	if (($lenratio > $toplenratio{$queryAllele}) || ($lenratio == $toplenratio{$queryAllele})) {
-	   	    
+
 	    if($multi_flag){
-       
+
 		    $hits{$queryAllele} = $line;
 		    $coords{$qid}{'start'} = $sstart;
 		    $coords{$qid}{'end'} = $send;
 		    $coords{$qid}{'sid'} = $sid;
 		    $topbitscore{$queryAllele} = $bitscore;
 		    $toplenratio{$queryAllele} = $lenratio;
-		    
+
 	    }elsif((! exists $hits{$queryAllele}) && ($bitscore > $topbitscore{$queryAllele})){
-		
+
 		$hits{$queryAllele} = $line;
 		$coords{$qid}{'start'} = $sstart;
 		$coords{$qid}{'end'} = $send;
 		$coords{$qid}{'sid'} = $sid;
 		$topbitscore{$queryAllele} = $bitscore;
 		$toplenratio{$queryAllele} = $lenratio;
-		
+
 	    }
 	}
 }
@@ -107,7 +107,7 @@ for my $i (0 .. $#alleles) {
     my $end1 = $coords{$allele1}{'end'};
     my $sid1 = $coords{$allele1}{'sid'};
     my $length1 = ($end1 - $start1) + 1;
-   
+
     for my $j (($i + 1) .. $#alleles) {
 	my $allele2 = $alleles[$j];
 	my $start2 = $coords{$allele2}{'start'};
@@ -115,7 +115,7 @@ for my $i (0 .. $#alleles) {
 	my $sid2 = $coords{$allele2}{'sid'};
 	my $length2 = ($end2 - $start2) + 1;
 	my $overlap;
-	
+
 	if (($sid1 eq $sid2) && ($start2 < $end1) && ($end2 > $start1)) {#different alleles have overlapping matches in the genome
 	    if ($end2 < $end1) {
 		if ($start2 < $start1) {
@@ -141,8 +141,9 @@ for my $i (0 .. $#alleles) {
 		    print STDOUT $hits{$allele2};
 
 		    #Determine higher bit score and only keep allele that is said to be true
-		    my $a1bit = $topbitscore{$allele1};
-		    my $a2bit = $topbitscore{$allele2};
+		    my $a1bit = $coords{$allele1}{'bit'};
+		    my $a2bit = $coords{$allele2}{'bit'};
+
 
 		    if($a1bit > $a2bit){
 			print STDOUT "INFO: Bit Score for $allele1 greater than $allele2. Treating $allele1 as true hit\n\n";
@@ -154,8 +155,8 @@ for my $i (0 .. $#alleles) {
 		}else{
 
 		    #Store overlaps of same allele/gene
-		    my $a1bit = $topbitscore{$allele1};
-		    my $a2bit = $topbitscore{$allele2};
+		    my $a1bit = $coords{$allele1}{'bit'};
+		    my $a2bit = $coords{$allele2}{'bit'};
 
 		    #Remove overlapping multi copy alleles
 		    if($a1bit > $a2bit){
@@ -163,12 +164,13 @@ for my $i (0 .. $#alleles) {
 		    }else{
 			$multi_copy{$a1}{"$allele1:$sid1"} = undef if(exists $multi_copy{$a1}{"$allele1:$sid1"});
 		    }
-		    
+
 		}
 	    }
 	}
     }
 }
+
 
 for my $key (keys %hits) {
     my $hit = $hits{$key};

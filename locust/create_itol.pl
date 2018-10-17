@@ -82,8 +82,17 @@ my ($clonal_shape_str, $clonal_colors_str, $clonal_labels_str) = create_legend_i
 my ($species_shape_str, $species_colors_str, $species_labels_str) = create_legend_info(%$species_colors);
 
 write_itol_file(\%$st_hash, \%$st_colors, $st_shape_str, $st_colors_str, $st_labels_str, "itol_ST.txt");
-write_itol_file(\%$clonal_hash, \%$clonal_colors, $clonal_shape_str, $clonal_colors_str, $clonal_labels_str, "itol_clonal_complex.txt");
-write_itol_file(\%$species_hash, \%$species_colors, $species_shape_str, $species_colors_str, $species_labels_str, "itol_species.txt");
+if (%$clonal_hash){
+	print %$clonal_hash;
+	write_itol_file(\%$clonal_hash, \%$clonal_colors, $clonal_shape_str, $clonal_colors_str, $clonal_labels_str, "itol_clonal_complex.txt");
+} else {
+	print "No results were found to add to itol_clonal_complex.txt\n";
+}
+if (%$species_hash){
+	write_itol_file(\%$species_hash, \%$species_colors, $species_shape_str, $species_colors_str, $species_labels_str, "itol_species.txt");
+} else {
+	print "No results were found to add to itol_species.txt\n";
+}
 
 sub create_st_hash{
 	my @full_st_array = @_;
@@ -126,7 +135,7 @@ sub create_st_hash{
 		$ST_CALL = "new";
 	}
 	#Captures Short or Missing allele calls-- immediately designates ST as unknown
-	if ("SHORT" ~~ @allele_designations || "MISSING" ~~ @allele_designations){
+	if ("SHORT" ~~ @allele_designations || "MISSING" ~~ @allele_designations || "TRUNC" ~~ @allele_designations){
 		$ST_CALL = "unknown";
 	}
 	#Captures those with all alleles called but unknown to ST schema file. All UNKNOWN ST's should have been removed already except for these.

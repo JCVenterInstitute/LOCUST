@@ -33,7 +33,6 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --append_schema
                          --novel_schema
                          --download_schema
-                         --schema_alleles
                          --tree <type of tree>
                          --config <config file>
                          --org_search
@@ -77,9 +76,9 @@ B<--novel_schema>    : Creates a novel scheme
 
 B<--download_schema>	: Download Schema and Alleles from PubMLST. Provide an organism to search for.
 
-B<--schema_alleles>	  : The number of alleles in the downloaded schema.
-
 B<--tree, t>         : Type of tree building. Options: raxml,fasttree
+
+B<--exclude_genomes> : Skips including genomes with short/missing alleles when building a tree.
 
 B<--config, c>       : Config file to point to locally installed third party tools
 
@@ -180,6 +179,7 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'schema_alleles=i',
 	    'config|c=s',
 	    'tree|t=s',
+			'exclude_genomes',
 	    'org_search=s',
 	    'genome_type=s',
 	    'biosample_list=s',
@@ -307,7 +307,7 @@ if($opts{retype}){
 unless($opts{novel_schema}){
     print $lfh "|Step: Combine all genome type files into one\n";
     #Cat all st_files into one
-    
+
     &_cat($sth,$st_files);
     &_cat($nth,$fa_files);
 
@@ -331,7 +331,7 @@ if($opts{append_schema}){
     #Open combined alleles file
     my $combined_alleles = "$append_outdir/appended_alleles.fa";
     my $cfh = path($combined_alleles)->filehandle(">");
-    
+
     my $nr_file = &clean_fasta_file($opts{alleles},$new_allele_fa,$append_outdir);
 
     #Combined new alleles with initial alleles
@@ -346,10 +346,10 @@ if($opts{append_schema}){
     print $lfh "Running: $cmd\n";
     system($cmd) == 0 || die("ERROR: Problem running $cmd");
 
-    unlink($nr_file); 
+    unlink($nr_file);
     unlink($combined_alleles . "_orig");
     close $cfh;
-    
+
     #Run seq type with new alleles
     print $lfh "|Step: Run seq typer on new alleles\n";
     my($nst_files,$nfa_files) = run_seq_type($input_file,$combined_alleles);
@@ -359,12 +359,12 @@ if($opts{append_schema}){
     my $nst = path($new_st_file)->filehandle(">");
     &_cat($nst,$nst_files);
     close $nst;
-    
+
     #Add new ST types to $opts{mlst_scheme}
     print $lfh "|Step: Added new sequene types to user inputed scheme\n";
     &make_new_schema($new_st_file,$opts{scheme},$append_outdir);
     unlink($new_st_file);
-	
+
 }elsif($opts{novel_schema}){
 
     print $lfh "|Step: Create novel files\n";
@@ -372,17 +372,25 @@ if($opts{append_schema}){
 
 }
 
-if($opts{tree}){
-    my $tree_input_file;
-    $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
-
-    &create_tree($opts{tree},$tree_input_file);
-}
-
 #&remove_short_seq_stubs($top_seqs_files);
 
 unless($opts{skip_itol}){
-    &create_itol_file("$OUTPUT/ST_all.out");
+	my $st_file;
+	if ($opts{append_schema}){
+		$st_file = "$OUTPUT/appended_schema/append_allele_ST.out";
+	}	elsif ($opts{novel_schema}){
+		$st_file = "$OUTPUT/novel_schema/novel_ST_all.out";
+	} else {
+		$st_file = "$OUTPUT/ST_all.out";
+	}
+	&create_itol_file($st_file);
+}
+
+if($opts{tree}){
+    my $tree_input_file;
+    $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
+    &create_tree($opts{tree},$tree_input_file);
+    &strain_approximation();
 }
 
 &cleanup_files;
@@ -767,6 +775,17 @@ sub create_tree{
     print $lfh "Running: $cmd\n";
     system($cmd);
 }
+
+sub strain_approximation{
+
+	print $lfh "|Step: Generating st approximations.\n";
+
+	my $cmd = "perl $Bin/strain_approximation.pl";
+	$cmd .= " -i $opts{input_file}";
+	$cmd .= " -s ST_all.out";
+	system($cmd) == 0 || die("ERROR: $cmd failed");
+}
+
 sub median{
     my @vals = sort {$a <=> $b} @_;
     my $len = @vals;
@@ -1048,7 +1067,7 @@ sub remove_short_seq_stubs{
 		$first = 1;
 		next;
 	    }
-	    if($line =~ /^SHORT$/){
+	    if($line =~ /^SHORT$/ || $line =~ /^PSEUDO$/ || $line =~ /^5'PRTL$/ || $line =~ /^3'PRTL$/){
 		next;
 	    }
 	    if($first){
@@ -1077,7 +1096,6 @@ sub create_novel_files{
 
     #loop through each genomes top hit sequence file
     foreach my $file (@$fasta_files){
-
 	#find the genome name to use in novel ST file
 	my ($name,$path,$suffix) = fileparse($file);
 	my $genome = $1 if ($name =~ /(.*)\_hits\_top\_seqs\.fa/);
@@ -1124,7 +1142,14 @@ sub create_novel_files{
 			#Store allele SHORT for this genome
 			$genome_st->{$genome}->{$values[0]}->{$values[0]. ":" . $unique_id} = "SHORT";
 
-		    }else{
+		} elsif ($current_sequence =~ /^3'PRTL/){
+			$genome_st->{$genome}->{$p_allele} = "3'PRTL";
+		} elsif ($current_sequence =~ /^5'PRTL/){
+			$genome_st->{$genome}->{$p_allele} = "5'PRTL";
+		} elsif ($current_sequence =~ /^PSEUDO/){
+			$genome_st->{$genome}->{$p_allele} = "PSEUDO";
+
+		}	else{
 
 			unless(exists $unique_sequences->{$current_sequence}->{$p_allele}){
 
@@ -1390,7 +1415,7 @@ sub make_new_schema{
     open(my $new_fh, ">", $new_file) || die "ERROR: Cannot open $new_file.\n";
     open(my $final_st_fh, ">", $final_st_file) || die "ERROR: Cannot open $final_st_file.\n";
     open(my $orig_fh, "<", $orig_st) || die "ERROR: Cannot open $orig_st.\n";
-    
+
     #Determines the max ST Type Number found in
     #original file
     my ($ST_type_size,$ST_attr_size);
@@ -1427,20 +1452,20 @@ sub make_new_schema{
 	}
 	# Otherwise, store the ST number in schema as a value and the line (the ST's corresponding alleles) as a key.
 	else {
-	    
+
 	    if($max_st_num){
 		$max_st_num = $ST if($ST > $max_st_num);
 	    }else{
 		$max_st_num = $ST;
 	    }
-	    
+
 	    my $size = scalar @data;
 	    if (($size != ($ST_type_size + $ST_attr_size)) && ($size != $ST_type_size)) {
 		die "ERROR: ST $ST does not have the same number of columns as the header line or the alleles only: $size versus $ST_type_size alleles and $ST_attr_size attributes.\n";
 	    }
-	    
+
 	    my $st_type = join("\t",@data[0 .. ($ST_type_size - 1)]);
-	    
+
 	    unless(exists $schema->{$st_type}){
 		$schema->{$st_type} = $ST;
 
@@ -1462,7 +1487,7 @@ sub make_new_schema{
 
     #Parses new ST types and stores in hash
     open(my $new_st_fh, "<", $new_st_file);
-    
+
     while(<$new_st_fh>){
 
 	unless($_ =~ /Sample/){
@@ -1478,12 +1503,9 @@ sub make_new_schema{
 		my $skip_bad = 0;
 
 		foreach my $value (@values) {
-
-		    if (($value eq "MISSING") || ($value eq "SHORT")) {
-			$skip_bad = 1;
-
-		    } elsif ($value =~ /NEW/) {
-
+			if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO")) {
+					$skip_bad = 1;
+		    } elsif ($value eq "NEW") {
 			$skip_bad = 1;
 
 			print $lfh "|WARNING: no NEW alleles should be found for append_schema option but $sample had type $st_num for ($st_type).\n";
@@ -1492,25 +1514,25 @@ sub make_new_schema{
 		    }
 
 		}
-		
+
 		next if ($skip_bad);
-		
+
 		unless(exists $schema->{$st_type}){
 		    $max_st_num++;
 		    $schema->{$st_type} = $max_st_num;
 		    $stAttributes->{$max_st_num} = $unknown;
 		}
-		
+
 	    } else {
-		
+
 		if ((!defined $schema->{$st_type}) || ($st_num != $schema->{$st_type})) {
 		    die "ERROR: $st_num assigned for ($st_type) not found in $orig_st.\n";
 		}
-		
+
 	    }
-	    
+
 	}
-	
+
     }
 
     #Prints the new ST stypes to the new appended scheme
@@ -1531,14 +1553,14 @@ sub make_new_schema{
     open ($new_st_fh, "<", $new_st_file);
 
     while(<$new_st_fh>){
-	
+
 	my $line = $_;
 	$line =~ s/\s+$//;
-	
+
 	if($line =~ /UNKNOWN/){
-	    
+
 	    my @values  = split(/\t/,$line);
-	    
+
 	    (my $sample, my $st_num) = splice(@values,0,2);
 	    my $st_type = join("\t",@values[0 .. ($ST_type_size - 1)]);
 	    my $st_output = join("\t",@values);
@@ -1713,7 +1735,7 @@ sub run_seq_type{
 sub clean_fasta_file{
     print $lfh "|Step: Cleaning fasta files and make them non redundant\n";
     my ($old_alleles,$new_alleles,$dir) = @_;
-    
+
     my $allele_numbers = {};
     my $new_file = "$dir/appended_alleles_nr.fa";
 
@@ -1724,14 +1746,14 @@ sub clean_fasta_file{
     while(<$ofh>){
 
 	my $line = $_;
-       
+
 	if($line =~ /^>/){
 
 	    my $allele = $line;
 	    $allele =~ s/^>//;
 	    $allele =~ s/\s.*//;
 	    $allele =~ s/\s+//;
-	    
+
 	    my ($gene,$identifier) = split(/\_/,$allele, 2);
 	    
 	    if($identifier =~ /^(NOVEL|NOVEL_MC)\d+$/){
@@ -1747,7 +1769,7 @@ sub clean_fasta_file{
 		    }
 
 		}else{
-		  
+
 		    $allele_numbers->{$gene} = $identifier;
 
 		}
@@ -1779,7 +1801,7 @@ sub clean_fasta_file{
 	    $p_allele = $c_allele unless($p_allele);
 
 	    if($current_sequence){
-		
+
 		#Removes newlines and other whiespace to make for one string
 		$current_sequence =~ s/\s+//g;
 
@@ -1798,7 +1820,7 @@ sub clean_fasta_file{
 		    $unique_sequences->{$current_sequence}->{$p_allele} = "NOVEL" . $allele_numbers->{$p_allele}; #store unique seq
 
 		}
-		
+
 		$current_sequence = ""; #reset seq variable
 		$p_allele = $c_allele;
 
@@ -1849,7 +1871,7 @@ sub clean_fasta_file{
     }
 
     close $nrfh;
-    
+
     return($new_file);
 }
 
@@ -1931,7 +1953,7 @@ sub init_st_finder{
 	my($allele,$id) = split(/\_/,$mlstAllele->primary_id,2);
 
 	$alleleMap->{lc($mlstAllele->seq)}->{$allele} = $id;
-	
+
 	if ($mlstAllele->primary_id !~ /\_/) {
 	    die "FATAL: allele $mlstAllele->primary_id is not in expected format of GeneName_Identifier where GeneName the name of a gene with no special characters such as _ and Identifier is typically a number.\n";
 	}
@@ -1939,7 +1961,7 @@ sub init_st_finder{
 	$alleles_seen_alleles->{$allele}{$id} = 1;
     }
 
-       
+
     #perform sanity checking
     foreach my $allele (keys %{$alleles_seen_ST}) {
 	foreach my $id (keys $alleles_seen_ST->{$allele}) {
@@ -1995,8 +2017,7 @@ sub run_st_finder{
 
     # Open Bio::SeqIO object for top_seqs_file.
     my $inQueries = Bio::SeqIO->new(-file => "<$top_seqs_file", -format => "fasta",);
-    my $query_count = 1;
-    
+
     # Parse through the query.
     while (my $query = $inQueries->next_seq) {
 	my $queryName = $query->primary_id;                      # Query name.
@@ -2005,16 +2026,18 @@ sub run_st_finder{
 	#Split name to get queryAllele
 	my($queryAllele,$scheme) = split(/\_/,$queryName,2);
 
-	my $unique_id = $queryAllele . ":" . $query_count;
-	
-	$allelesFound{$queryAllele}{$unique_id} = "NEW";
-	$query_sequences{$queryAllele}{$unique_id} = $querySeq;
-	
+	$allelesFound{$queryAllele}{$queryName} = "NEW";
+	$query_sequences{$queryName} = $querySeq;
+
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
 	if ($querySeq =~ /^SHORT/) {
-	
-	    $allelesFound{$queryAllele}{$unique_id} = "SHORT";
-	    
+	    $allelesFound{$queryAllele}{$queryName} = "SHORT";
+		} elsif ($querySeq =~ /^PSEUDO/) {
+			    $allelesFound{$queryAllele}{$queryName} = "PSEUDO";
+		} elsif ($querySeq =~ /^5'PRTL/) {
+			    $allelesFound{$queryAllele}{$queryName} = "5'PRTL";
+		} elsif ($querySeq =~ /^3'PRTL/) {
+			    $allelesFound{$queryAllele}{$queryName} = "3'PRTL";
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
 
 	    #Note: Different alleles COULD have the same sequence
@@ -2024,12 +2047,10 @@ sub run_st_finder{
 		#(i.e. the query allele name forms the beginning of the MLST allele name),
 		#it is a proper match.
 		if ($mlstAlleleName eq $queryAllele) {
-		    $allelesFound{$queryAllele}{$unique_id} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
+		    $allelesFound{$queryAllele}{$queryName} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
 		}
 	    }
 	}
-
-	$query_count++;
     }
 
     #Determine which alleles have multiple variants
@@ -2041,7 +2062,7 @@ sub run_st_finder{
     #Creates base string, with the alleles that do not have variants
     #Variants will be 'plugged' in later
     my $location_count = 0;
-    
+
     foreach my $key (@$allelesOrdered){
 
 	$locations{$key} = $location_count;
@@ -2069,7 +2090,6 @@ sub run_st_finder{
 	    push(@multi_variants,\@v);
 	    push(@base_string,"");
 
-
 	}else{
 
 	    if(@v){
@@ -2083,11 +2103,10 @@ sub run_st_finder{
 
     my @variants;
     push @variants, clone(\@base_string);
-      
+
     foreach my $gene(@multi_variants){
 
-	my($base_allele,$unique_num) = split(/:/,$gene->[0]);
-     
+	my($base_allele,$gene_schema) = split(/_/,$gene->[0]);
 	my $values_to_add = scalar(@variants);
 
 	my $size = scalar(@$gene);
@@ -2099,9 +2118,9 @@ sub run_st_finder{
 	my $index = 0;  #increment this until it's time to move on.
 
 	for my $allele ( @$gene ) {
-	    	    
+			my($a,$s) = split(/_/,$allele);
 	    my $allele_schema = $allelesFound{$base_allele}{$allele};
-	    
+
 	    while ( $values_added < $values_to_add ) {
 		# Fill the location for allele at this entry
 		$variants[$index][$allele_index] = $allele_schema;
@@ -2126,12 +2145,10 @@ sub run_st_finder{
 
 	#Print new allele sequences to fasta file
 	if(exists $allelesFound{$allele}){
-
 	    foreach my $a(keys $allelesFound{$allele}){
-
-		if($allelesFound{$allele}{$a} =~ /NEW/){
+		if($allelesFound{$allele}{$a} eq 'NEW'){
 		    print $new_alleles_fh ">$allele\n"  unless $new_alleles;
-		    print $new_alleles_fh "$query_sequences{$allele}{$a}\n" unless $new_alleles;
+		    print $new_alleles_fh "$query_sequences{$a}\n" unless $new_alleles;
 		}
 	    }
 	}
@@ -2367,9 +2384,9 @@ sub cleanup_files{
     }
 }
 sub check_params{
-    
+
     my $error = "";
-    
+
     if($opts{config}){
 	if ($opts{config} !~ /^\//) {
 	    $opts{config} = "$START_CWD/$opts{config}";
@@ -2380,13 +2397,13 @@ sub check_params{
     }else{
         $error .= "ERROR: Could not find valid config file in current working directory. Please provide one using --config\n";
     }
-    
+
     if($opts{input_file}){
 	if ($opts{input_file} !~ /^\//) {
 	    $opts{input_file} = "$START_CWD/$opts{input_file}";
 	}
 	$error .= "ERROR: $opts{input_file} does not exist or is size zero\n" unless (-s $opts{input_file});
-	
+
 	if($opts{hmm_model}){
 	    $error .= "ERROR: Must provide --gb_list if running HMM models without NCBI downloading\n" unless($opts{gb_list});
 	}
@@ -2394,13 +2411,13 @@ sub check_params{
 	if($opts{org_search} || $opts{biosample_list} || $opts{accession_list} || $opts{input_path}){
 	    $error .= "ERROR: Please provide only one input option: --input_file, --org_search, --biosample_list, --accession_list, --input_path\n";
 	}
-	
+
     }elsif(!($opts{org_search} || $opts{biosample_list} || $opts{accession_list} || $opts{input_path})){
 	$error .= "ERROR: Option --input_file/-i is required\n";
     }
-    
+
     if($opts{seed_file}){
-	
+
 	if ($opts{seed_file} !~ /^\//) {
 	    $opts{seed_file} = "$START_CWD/$opts{seed_file}";
 	}
@@ -2408,7 +2425,20 @@ sub check_params{
     }elsif($opts{incrememnt}){
 	$error .= "ERROR: Option --seed_file is required when using the --incrememnt option\n";
     }
-    
+		if ($opts{download_schema}) {
+			if ($opts{scheme}) {
+				$error .= "ERROR: Cannot use the download schema option when providing schema\n";
+				die("ERROR: Cannot use the download schema option when providing schema.\n");
+			}
+			if ($opts{alleles}) {
+				$error .= "ERROR: Cannot use the download schema option when providing alleles file\n";
+				die("ERROR: Cannot use the download schema option when providing alleles file.\n");
+			}
+			if ($opts{seed_file}) {
+				$error .= "ERROR: Cannot use the download schema option when providing a seed file\n";
+				die("ERROR: Cannot use the download schema option when providing a seed file.\n");
+			}
+		}
     unless($opts{download_schema}){
 	if($opts{scheme}){
 	    if ($opts{scheme} !~ /^\//) {
@@ -2418,7 +2448,7 @@ sub check_params{
 	}else{
 	    $error .= "ERROR: Option --scheme/-m is required, unless doing --novel_schema\n" unless($opts{novel_schema});
 	}
-	
+
 	if($opts{alleles}){
 	    if ($opts{alleles} !~ /^\//) {
 		$opts{alleles} = "$START_CWD/$opts{alleles}";
@@ -2428,11 +2458,11 @@ sub check_params{
 	    $error .= "ERROR: Option --alleles/-a is required, unless doing --novel_schema\n" unless($opts{novel_schema});
 	}
     }
-    
+
     if($opts{novel_schema} && $opts{append_schema}){
 	$error .= "ERROR: Can only use either --novel_schema OR --append_schema. Can not use both options\n";
     }
-    
+
     if($opts{tree}){
 
 	$error .= "ERROR: the arugment value '$opts{tree}' for tree option is not valid. The valid entries are 'raxml' or 'fasttree'\n" unless(lc($opts{tree}) eq 'raxml' || lc($opts{tree}) eq 'fasttree');

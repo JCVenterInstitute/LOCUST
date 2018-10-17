@@ -15,7 +15,6 @@
 #along with this program.  If not, see <http://www.gnu.org/licenses/>.
 use strict;
 use warnings;
-
 =head1 NAME
 
 download_mlst.pl -  A downloader for MLST profiles and allles from pubmlst.com
@@ -29,8 +28,6 @@ download_mlst.pl -  A downloader for MLST profiles and allles from pubmlst.com
 =head1 OPTIONS
 
 B<--organism, o>   : Term to search for MLST profile.
-
-B<--loci_num, l>    : Number of expected loci in MLST schema.
 
 B<--help, h>         : Display this help message.
 
@@ -183,7 +180,7 @@ sub change_fasta_allele_names{
 }
 
 sub change_schema_header{
-  (my $schema_file, my $str_for_removal, my $loci_count) = @_;
+  (my $schema_file, my $str_for_removal) = @_;
   my $tmp = 'schema_temp.txt';
   check_file_existence($tmp);
   open (OUT, ">", $tmp);
@@ -194,11 +191,14 @@ sub change_schema_header{
     if ($. == 1){
       my @header_columns = split(/\t/, $line);
       for (my $i = 0; $i < scalar @header_columns; $i++){
-        if (not $loci_count == 0){
         if ($i == 0){
+          print "How many alleles are present in this schema?\n";
+          print join("\t", @header_columns) . "\n";
+          my $loci_count = <STDIN>;
+          chomp $loci_count;
           $header_columns[$i] = $header_columns[$i] . "($loci_count)";
         }
-      }
+
         $header_columns[$i] =~ s/$str_for_removal//;
       }
       my $final_header = join("\t", @header_columns);
