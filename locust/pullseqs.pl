@@ -223,25 +223,28 @@ while (<INFILE>) {
         print PEPFILE $header;
         print PEPFILE $translated_sequence->seq . "\n";
         close(PEPFILE);
-      if ($pred_prot_seq == $prot_length){
+
+      if (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") == -1) || index($translated_sequence->seq, "*") + 1 == $prot_length )) {
   	    for my $seq (@seqlines) {
   		      #print $seq;
   	    print OUTFILE $seq;
   	    print LOGFILE $seq;
   	    }
-    } else {
-
+    } elsif (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") != -1) && index($translated_sequence->seq, "*" != $prot_length ))) {
         print OUTFILE "$header\n";
         print OUTFILE "PSEUDO\n";
         print LOGFILE "WARN: Printed PSEUDO as sequence because it had a premature stop when translated.\n";
-
+    } else {
+        print OUTFILE ">$tokens[0]\n";
+        print OUTFILE "NEW\n";
+        print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit without a truncation event.\n";
     }
 } else {
-  if (($tokens[8] == $tokens[13]) && ($perc_matched < 1)){
+  if (($tokens[8] == $tokens[13] || $tokens[8] == 1) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
       print OUTFILE "5'PRTL\n";
       print LOGFILE "WARN: Printed 5'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
-  } elsif (($tokens[9] == $tokens[13]) && ($perc_matched < 1)){
+  } elsif (($tokens[9] == $tokens[13] || $tokens[9] == 1) && ($perc_matched < 1)){
       print OUTFILE ">$tokens[0]\n";
       print OUTFILE "3'PRTL\n";
       print LOGFILE "WARN: Printed 3'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";

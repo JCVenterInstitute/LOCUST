@@ -373,9 +373,9 @@ if($opts{append_schema}){
 unless($opts{skip_itol}){
 	my $st_file;
 	if ($opts{append_schema}){
-		$st_file = "$OUTPUT/append_allele_ST.out";
+		$st_file = "$OUTPUT/appended_schema/append_allele_ST.out";
 	}	elsif ($opts{novel_schema}){
-		$st_file = "$OUTPUT/novel_allele_ST.out";
+		$st_file = "$OUTPUT/novel_schema/novel_ST_all.out";
 	} else {
 		$st_file = "$OUTPUT/ST_all.out";
 	}
@@ -1092,7 +1092,6 @@ sub create_novel_files{
 
     #loop through each genomes top hit sequence file
     foreach my $file (@$fasta_files){
-
 	#find the genome name to use in novel ST file
 	my ($name,$path,$suffix) = fileparse($file);
 	my $genome = $1 if ($name =~ /(.*)\_hits\_top\_seqs\.fa/);
@@ -1130,7 +1129,14 @@ sub create_novel_files{
 			#Store allele SHORT for this genome
 			$genome_st->{$genome}->{$p_allele} = "SHORT";
 
-		    }else{
+		} elsif ($current_sequence =~ /^3'PRTL/){
+			$genome_st->{$genome}->{$p_allele} = "3'PRTL";
+		} elsif ($current_sequence =~ /^5'PRTL/){
+			$genome_st->{$genome}->{$p_allele} = "5'PRTL";
+		} elsif ($current_sequence =~ /^PSEUDO/){
+			$genome_st->{$genome}->{$p_allele} = "PSEUDO";
+
+		}	else{
 
 			unless(exists $unique_sequences->{$current_sequence}->{$p_allele}){
 
@@ -1242,7 +1248,6 @@ sub print_novel_schema{
     my $ST;
     my $ST_number = 0;
     my $genome_alleles;
-
     #Note: Both genome_names and alleles come in pre-sorted
     foreach my $genome (keys %$genome_st){
 	my $hsh = $genome_st->{$genome};
