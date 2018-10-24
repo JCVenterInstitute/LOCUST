@@ -1096,6 +1096,7 @@ sub create_novel_files{
 
     #loop through each genomes top hit sequence file
     foreach my $file (@$fasta_files){
+
 	#find the genome name to use in novel ST file
 	my ($name,$path,$suffix) = fileparse($file);
 	my $genome = $1 if ($name =~ /(.*)\_hits\_top\_seqs\.fa/);
@@ -1140,31 +1141,30 @@ sub create_novel_files{
 		    if ($current_sequence  =~ /^SHORT/) {
 
 			#Store allele SHORT for this genome
-			$genome_st->{$genome}->{$values[0]}->{$values[0]. ":" . $unique_id} = "SHORT";
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "SHORT";
 			
 		    } elsif ($current_sequence =~ /^3'PRTL/){
 			
-			$genome_st->{$genome}->{$values[0]}->{$values[0].":".$unique_id} = "3'PRTL";
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "3'PRTL";
 			
 		    } elsif ($current_sequence =~ /^5'PRTL/){
 			
-			$genome_st->{$genome}->{$values[0]}->{$values[0].":".$unique_id} = "5'PRTL"; 
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "5'PRTL"; 
 			
 		    } elsif ($current_sequence =~ /^PSEUDO/){
-			$genome_st->{$genome}->{$values[0]}->{$values[0].":".$unique_id} = "PSEUDO";
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "PSEUDO";
 			
 		    } else {
 
 			my $novel_id;
 
 			if(exists $unique_sequences->{$current_sequence}->{$values[0]}){
-
+			  
 			    my($id,$orig_allele) = split("_",$unique_sequences->{$current_sequence}->{$values[0]});
-			    $novel_id = $id . "_MC";
-			    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $novel_id;
-
+			    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $id;
+			    
 			}else{
-
+			
 			    #Increment number based on original allele name, not unique value of allele and unique id
 			    if(exists $allele_number->{$values[0]}){
 				$allele_number->{$values[0]}++;
@@ -1174,12 +1174,10 @@ sub create_novel_files{
 
 			    #Store new seq and assign next incremented allele number
 			    $novel_id = "NOVEL" . $allele_number->{$values[0]};
-			    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$c_allele";
-			    
-			}
+			    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$p_allele";
 
-			#Store allele number for this genome
-			$genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
+			    $genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
+			}
 
 		    }
 
@@ -1211,32 +1209,32 @@ sub create_novel_files{
 	    if ($current_sequence  =~ /^SHORT/) {
 
 		#Store allele SHORT for this genome
-		$genome_st->{$genome}->{$values[0]}->{$values[0] . ":" . $unique_id} = "SHORT";
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "SHORT";
 
 	    }elsif ($current_sequence =~ /^3'PRTL/){
 
-		$genome_st->{$genome}->{$values[0]}->{$values[0].":".$unique_id} = "3'PRTL";
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "3'PRTL";
 		
 	    } elsif ($current_sequence =~ /^5'PRTL/){
 		
-		$genome_st->{$genome}->{$values[0]}->{$values[0].":".$unique_id} = "5'PRTL";
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "5'PRTL";
 		
 	    } elsif ($current_sequence =~ /^PSEUDO/){
 	
-		$genome_st->{$genome}->{$values[0]}->{$values[0].":".$unique_id} = "PSEUDO";
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "PSEUDO";
 		
 	    }else{
 
 		my $novel_id;
 
+
 		if(exists $unique_sequences->{$current_sequence}->{$values[0]}){
 
 		    my($id,$orig_allele) = split("_",$unique_sequences->{$current_sequence}->{$values[0]});
-		    $novel_id = $id . "_MC";
-		    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $novel_id;
-
+		    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $id;
+		
 		}else{
-
+		
 		    #Split p_allele name on : which is used to help multi copy designation
 		    my @values = split(":",$p_allele);
 
@@ -1249,49 +1247,48 @@ sub create_novel_files{
 
 		    #Store new seq and assign next incremented allele number
 		    $novel_id = "NOVEL" . $allele_number->{$values[0]};
-		    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$c_allele";
+		    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$p_allele";
 
+		    $genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
 		}
-		
-		#Store allele number for this genome
-		$genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
-		
+				
 	    }
 	}
     }
-
     #Modify genome_st to add _MC label where necessary
-    foreach my $genome(keys %$genome_st){
-
-	foreach my $allele(keys %{$genome_st->{$genome}}){
-
-	    my $count_alleles = scalar(keys %{$genome_st->{$genome}->{$allele}});
-	    my $labels;
+    if($opts{multi_copy}){
+	foreach my $genome(keys %$genome_st){
 	    
-	    if($count_alleles > 1){ #means multi copy
-
-		foreach my $unique(keys %{$genome_st->{$genome}->{$allele}}){
-
-		    my $label = $genome_st->{$genome}->{$allele}->{$unique};
-
-		    if(exists $labels->{$label}){
+	    foreach my $allele(keys %{$genome_st->{$genome}}){
+		
+		my $count_alleles = scalar(keys %{$genome_st->{$genome}->{$allele}});
+		my $labels;
+		
+		if($count_alleles > 1){ #means multi copy
+		    
+		    foreach my $unique(keys %{$genome_st->{$genome}->{$allele}}){
 			
-			$genome_st->{$genome}->{$allele}->{$unique} = $label . "_MC";
-
-			my $orig_label = $labels->{$label};
-			$genome_st->{$genome}->{$allele}->{$orig_label} = $label . "_MC";
-
-		    }else{
-
-			$labels->{$label} = $unique;
+			my $label = $genome_st->{$genome}->{$allele}->{$unique};
+			
+			if(exists $labels->{$label}){
+			    
+			    $genome_st->{$genome}->{$allele}->{$unique} = $label . "_MC";
+			    
+			    my $orig_label = $labels->{$label};
+			    $genome_st->{$genome}->{$allele}->{$orig_label} = $label . "_MC";
+			    
+			}else{
+			    
+			    $labels->{$label} = $unique;
+			}
+			
 		    }
 		    
-		}
+		}				       
 		
-	    }				       
-
-	}
+	    }
 	
+	}
     }
     
     #Sort allele and genome names to ensure proper ordering
