@@ -1112,7 +1112,6 @@ sub create_novel_files{
 
 	my $unique_id = 0;
 
-	print Dumper($file);exit;
 	while(<$fh>){
 
 	    my $line = $_;
@@ -1345,7 +1344,6 @@ sub print_novel_schema{
     my $genome_alleles;
     my $genome_print;
 
-    print Dumper($genome_st);exit;
     #Determine which alleles have multiple variants
     foreach my $genome(@$genome_names){
 	
