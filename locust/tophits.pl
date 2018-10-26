@@ -37,6 +37,7 @@ my %coords = ();
 my %topbitscore = ();
 my %toplenratio = ();
 my %multi_copy = ();
+my %bitscores = ();
 
 open (INFILE, $inputfile) || die "Can't open $inputfile: $!";
 open (OUTFILE, ">$outputfile") || die "Can't open $outputfile: $!";
@@ -69,39 +70,43 @@ while (<INFILE>) {
 
 	my($queryAllele,$scheme) = split(/\_/,$qid,2);
 
+	$bitscores{$queryAllele}{$sid} = $bitscore;
+	
 	#Store hits above 90% id
 	if($percent >= 90){
-	    $multi_copy{$queryAllele}{$qid .":" . $sid} = _trim($line);
-	}
-
-	if (($lenratio > $toplenratio{$queryAllele}) || ($lenratio == $toplenratio{$queryAllele})) {
+	    $multi_copy{$queryAllele}{$sid} = _trim($line);
 
 	    if($multi_flag){
-
-		    $hits{$queryAllele} = $line;
-		    $coords{$qid}{'start'} = $sstart;
-		    $coords{$qid}{'end'} = $send;
-		    $coords{$qid}{'sid'} = $sid;
-		    $topbitscore{$queryAllele} = $bitscore;
-		    $toplenratio{$queryAllele} = $lenratio;
-
-	    }elsif((! exists $hits{$queryAllele}) && ($bitscore > $topbitscore{$queryAllele})){
-
-		$hits{$queryAllele} = $line;
-		$coords{$qid}{'start'} = $sstart;
-		$coords{$qid}{'end'} = $send;
-		$coords{$qid}{'sid'} = $sid;
-		$topbitscore{$queryAllele} = $bitscore;
-		$toplenratio{$queryAllele} = $lenratio;
-
+		$coords{$qid . ":" . $sid}{'start'} = $sstart;
+		$coords{$qid . ":" . $sid}{'end'} = $send;
+		$coords{$qid . ":" . $sid}{'sid'} = $sid;
 	    }
 	}
+
+	if (($lenratio > $toplenratio{$queryAllele}) || 
+	    ($lenratio == $toplenratio{$queryAllele})) {
+	    
+	    if($bitscore > $topbitscore{$queryAllele}){
+		
+		$toplenratio{$queryAllele} = $lenratio;
+		$topbitscore{$queryAllele} = $bitscore;
+		
+		$coords{$qid . ":" . $sid}{'start'} = $sstart;
+		$coords{$qid . ":" . $sid}{'end'} = $send;
+		$coords{$qid . ":" . $sid}{'sid'} = $sid;
+
+		#Store the top hit for this queryAllele
+		$hits{$queryAllele} = $line;
+	    }
+	}
+
 }
 
 my @alleles = (keys %coords);
 my $overlap_alleles;
 
 for my $i (0 .. $#alleles) {
+    my @values1 = split(":",$alleles[$i]);
     my $allele1 = $alleles[$i];
     my $start1 = $coords{$allele1}{'start'};
     my $end1 = $coords{$allele1}{'end'};
@@ -109,6 +114,7 @@ for my $i (0 .. $#alleles) {
     my $length1 = ($end1 - $start1) + 1;
 
     for my $j (($i + 1) .. $#alleles) {
+	my @values2 = split(":",$alleles[$j]);
 	my $allele2 = $alleles[$j];
 	my $start2 = $coords{$allele2}{'start'};
 	my $end2 = $coords{$allele2}{'end'};
@@ -136,27 +142,26 @@ for my $i (0 .. $#alleles) {
 		my($a2,$scheme1) = split(/\_/,$allele2,2);
 
 		if($a1 ne $a2){
-		    print STDOUT "WARNING: alleles of two different genes ($allele1 and $allele2) have matches that significantly overlap for genome $genome:\n";
-		    print STDOUT $hits{$allele1};
-		    print STDOUT $hits{$allele2};
+		    print STDOUT "WARNING: alleles of two different genes ($values1[0] and $values2[0]) have matches that significantly overlap for genome $genome:\n";
+		    print STDOUT $hits{$a1};
+		    print STDOUT $hits{$a2};
 
 		    #Determine higher bit score and only keep allele that is said to be true
 		    my $a1bit = $coords{$allele1}{'bit'};
 		    my $a2bit = $coords{$allele2}{'bit'};
 
-
 		    if($a1bit > $a2bit){
-			print STDOUT "INFO: Bit Score for $allele1 greater than $allele2. Treating $allele1 as true hit\n\n";
-			$hits{$allele2} = undef;
+			print STDOUT "INFO: Bit Score for $values1[0] greater than $values2[0]. Treating $values1[0] as true hit\n\n";
+			$hits{$a2} = undef;
 		    }else{
-			print STDOUT "INFO: Bit Score for $allele2 greater than $allele1. Treating $allele2 as true hit\n\n";
-			$hits{$allele1} = undef;
+			print STDOUT "INFO: Bit Score for $values2[0] greater than $values1[0]. Treating $values2[0] as true hit\n\n";
+			$hits{$a1} = undef;
 		    }
 		}else{
 
 		    #Store overlaps of same allele/gene
-		    my $a1bit = $coords{$allele1}{'bit'};
-		    my $a2bit = $coords{$allele2}{'bit'};
+		    my $a1bit = $coords{$a1}{'bit'};
+		    my $a2bit = $coords{$a2}{'bit'};
 
 		    #Remove overlapping multi copy alleles
 		    if($a1bit > $a2bit){
@@ -170,7 +175,6 @@ for my $i (0 .. $#alleles) {
 	}
     }
 }
-
 
 for my $key (keys %hits) {
     my $hit = $hits{$key};

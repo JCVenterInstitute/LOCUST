@@ -1111,7 +1111,8 @@ sub create_novel_files{
 	#designation to assign
 
 	my $unique_id = 0;
-	
+
+	print Dumper($file);exit;
 	while(<$fh>){
 
 	    my $line = $_;
@@ -1299,6 +1300,7 @@ sub create_novel_files{
     my $novel_outdir = "$OUTPUT/novel_schema";
     mkdir($novel_outdir) unless (-d $novel_outdir);
 
+
     #Call novel print subs
     print_novel_schema($genome_st,\@genome_names,\@alleles,$novel_outdir);
     print_novel_fasta($unique_sequences,$novel_outdir);
@@ -1343,6 +1345,7 @@ sub print_novel_schema{
     my $genome_alleles;
     my $genome_print;
 
+    print Dumper($genome_st);exit;
     #Determine which alleles have multiple variants
     foreach my $genome(@$genome_names){
 	
