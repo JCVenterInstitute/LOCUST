@@ -80,6 +80,7 @@ while (<INFILE>) {
 		$coords{$qid . ":" . $sid}{'start'} = $sstart;
 		$coords{$qid . ":" . $sid}{'end'} = $send;
 		$coords{$qid . ":" . $sid}{'sid'} = $sid;
+		$coords{$qid . ":" . $sid}{'bit'} = $bitscore;
 	    }
 	}
 
@@ -94,6 +95,7 @@ while (<INFILE>) {
 		$coords{$qid . ":" . $sid}{'start'} = $sstart;
 		$coords{$qid . ":" . $sid}{'end'} = $send;
 		$coords{$qid . ":" . $sid}{'sid'} = $sid;
+		$coords{$qid . ":" . $sid}{'bit'} = $bitscore;
 
 		#Store the top hit for this queryAllele
 		$hits{$queryAllele} = $line;
@@ -160,14 +162,14 @@ for my $i (0 .. $#alleles) {
 		}else{
 
 		    #Store overlaps of same allele/gene
-		    my $a1bit = $coords{$a1}{'bit'};
-		    my $a2bit = $coords{$a2}{'bit'};
+		    my $a1bit = $coords{$allele1}{'bit'};
+		    my $a2bit = $coords{$allele2}{'bit'};
 
 		    #Remove overlapping multi copy alleles
 		    if($a1bit > $a2bit){
-			$multi_copy{$a2}{"$allele2:$sid2"} = undef if(exists $multi_copy{$a2}{"$allele2:$sid2"});
+			$multi_copy{$a2}{$sid2} = undef if(exists $multi_copy{$a2}{$sid2});
 		    }else{
-			$multi_copy{$a1}{"$allele1:$sid1"} = undef if(exists $multi_copy{$a1}{"$allele1:$sid1"});
+			$multi_copy{$a1}{$sid1} = undef if(exists $multi_copy{$a1}{$sid1});
 		    }
 
 		}
@@ -196,9 +198,9 @@ foreach my $gene(keys %multi_copy){
     #Now loop and print information if there are multi copy
     if($number > 1){
 
-	foreach my $id(keys $multi_copy{$gene}){
+	foreach my $id (keys $multi_copy{$gene}){
 	    
-	    my($a,$qid) = split(":",$id);
+	    my($a,$sid) = split(":",$id);
 	    
 	    if(defined $multi_copy{$gene}{$id}){
 		
@@ -207,6 +209,8 @@ foreach my $gene(keys %multi_copy){
 		#print header if necessary
 		print $MULTI_FILE_FH "#Genome: $genome\n" unless $print_g;
 		print $MULTI_FILE_FH "#Allele: $gene\n" unless $print_a;
+
+		#Flags to avoid printing headers
 		$print_a=1;
 		$print_g=1;
 		
