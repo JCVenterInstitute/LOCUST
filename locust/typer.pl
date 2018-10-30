@@ -363,7 +363,7 @@ if($opts{append_schema}){
     #Add new ST types to $opts{mlst_scheme}
     print $lfh "|Step: Added new sequene types to user inputed scheme\n";
     &make_new_schema($new_st_file,$opts{scheme},$append_outdir);
-    #unlink($new_st_file);
+    unlink($new_st_file);
 
 }elsif($opts{novel_schema}){
 
@@ -1093,7 +1093,8 @@ sub create_novel_files{
     my $genome_st; #stores what alleles are associated with what genome
     my $allele_number; #stores allele numbers to increment
     my @genome_names; #stores genome names
-
+    my $ambig_alleles;
+    
     #loop through each genomes top hit sequence file
     foreach my $file (@$fasta_files){
 
@@ -1162,7 +1163,8 @@ sub create_novel_files{
 			  
 			    my($id,$orig_allele) = split("_",$unique_sequences->{$current_sequence}->{$values[0]});
 			    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $id;
-			    
+			    $ambig_alleles->{$genome}->{$orig_allele} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
+
 			}else{
 			
 			    #Increment number based on original allele name, not unique value of allele and unique id
@@ -1176,6 +1178,7 @@ sub create_novel_files{
 			    $novel_id = "NOVEL" . $allele_number->{$values[0]};
 			    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$p_allele";
 
+			    $ambig_alleles->{$genome}->{$values[0]. ":" .$unique_id} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
 			    $genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
 			}
 
@@ -1223,7 +1226,7 @@ sub create_novel_files{
 	
 		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "PSEUDO";
 		
-	    }else{
+	    }else{ 
 
 		my $novel_id;
 
@@ -1232,7 +1235,8 @@ sub create_novel_files{
 
 		    my($id,$orig_allele) = split("_",$unique_sequences->{$current_sequence}->{$values[0]});
 		    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $id;
-		
+		    $ambig_alleles->{$genome}->{$orig_allele} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
+		    
 		}else{
 		
 		    #Split p_allele name on : which is used to help multi copy designation
@@ -1249,46 +1253,52 @@ sub create_novel_files{
 		    $novel_id = "NOVEL" . $allele_number->{$values[0]};
 		    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$p_allele";
 
+		    $ambig_alleles->{$genome}->{$values[0]. ":" .$unique_id} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
 		    $genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
 		}
 				
 	    }
 	}
     }
-    #Modify genome_st to add _MC label where necessary
-    if($opts{multi_copy}){
-	foreach my $genome(keys %$genome_st){
+
+
+    #Add post labels for MC and AMBIG alleles
+    foreach my $genome(keys %$genome_st){
+	
+	foreach my $allele(keys %{$genome_st->{$genome}}){
 	    
-	    foreach my $allele(keys %{$genome_st->{$genome}}){
+	    my $count_alleles = scalar(keys %{$genome_st->{$genome}->{$allele}});
+	    my $labels;
+    		    
+	    foreach my $unique(keys %{$genome_st->{$genome}->{$allele}}){
 		
-		my $count_alleles = scalar(keys %{$genome_st->{$genome}->{$allele}});
-		my $labels;
+		my $label = $genome_st->{$genome}->{$allele}->{$unique};
+
+		#add AMBIG label if needed
+		if(exists $ambig_alleles->{$genome}->{$unique}){
+		    $genome_st->{$genome}->{$allele}->{$unique} = "AMBIG";
+		}
 		
-		if($count_alleles > 1){ #means multi copy
+		if($count_alleles > 1 && $opts{multi_copy}) { #means multi_copy
 		    
-		    foreach my $unique(keys %{$genome_st->{$genome}->{$allele}}){
+		    if(exists $labels->{$label}){
 			
-			my $label = $genome_st->{$genome}->{$allele}->{$unique};
+			$genome_st->{$genome}->{$allele}->{$unique} = $label . "_MC";
 			
-			if(exists $labels->{$label}){
-			    
-			    $genome_st->{$genome}->{$allele}->{$unique} = $label . "_MC";
-			    
-			    my $orig_label = $labels->{$label};
-			    $genome_st->{$genome}->{$allele}->{$orig_label} = $label . "_MC";
-			    
-			}else{
-			    
-			    $labels->{$label} = $unique;
-			}
+			my $orig_label = $labels->{$label};
+			$genome_st->{$genome}->{$allele}->{$orig_label} = $label . "_MC";
 			
+		    }else{
+			
+			$labels->{$label} = $unique;
 		    }
 		    
-		}				       
+		}
 		
-	    }
-	
+	    }				       
+	    
 	}
+	
     }
     
     #Sort allele and genome names to ensure proper ordering
@@ -1312,16 +1322,19 @@ sub print_novel_fasta{
     my $fh = path($file)->filehandle(">");
 
     foreach my $seq (keys %$sequences){
-	
+	  
 	foreach my $allele (keys %{$sequences->{$seq}}){
 	    
-	    if ($seq !~ /^SHORT/) {
+	    if ($seq !~ /^(SHORT|PSEUDO|PRTL)/) {
 		my @values = split(":",$allele);
 		my ($novel_id,$orig_allele) = split("_",$sequences->{$seq}->{$allele});
 
-		my $header = "$values[0]" . "_" . "$novel_id";
-		print $fh ">$header\n";
-		print $fh "$seq\n";
+		#Do not print ambigious sequences
+		unless($seq =~ /[^ATGCacgt+]/){ 
+		    my $header = "$values[0]" . "_" . "$novel_id";
+		    print $fh ">$header\n";
+		    print $fh "$seq\n";
+		}
 	    }
 	}
     }
@@ -1568,9 +1581,12 @@ sub make_new_schema{
 		my $skip_bad = 0;
 
 		foreach my $value (@values) {
-		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO")) {
+		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO") || ($value =~ /AMBIG/)) {
+			
 			$skip_bad = 1;
+		    
 		    } elsif ($value eq "NEW") {
+		
 			$skip_bad = 1;
 
 			print $lfh "|WARNING: no NEW alleles should be found for append_schema option but $sample had type $st_num for ($st_type).\n";
@@ -2054,7 +2070,9 @@ sub run_st_finder{
     my %query_sequences;               # hash ref of query sequences
 
     my $outputfile;
-
+    my $ambig_alleles;
+    my $ambig_flag;
+    
     #Open File for NEW Allele sequences
     my($new_alleles_file,$new_alleles_fh);
 
@@ -2088,7 +2106,7 @@ sub run_st_finder{
     while (my $query = $inQueries->next_seq) {
 	my $queryName = $query->primary_id;                      # Query name.
 	my $querySeq = $query->seq;                              # Query sequence.
-
+	
 	#Split name to get queryAllele
 	my($queryAllele,$scheme) = split(/\_/,$queryName,2);
 
@@ -2097,6 +2115,12 @@ sub run_st_finder{
 	$allelesFound{$queryAllele}{$unique_id} = "NEW";
 	$query_sequences{$queryAllele}{$unique_id} = $querySeq;
 
+	#Check if sequence is ambigious
+	if($querySeq =~ /[^ATGCacgt+]/){
+	    $ambig_alleles->{$unique_id} = 1;
+	    $ambig_flag = 1;
+	}
+	
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
 	if ($querySeq =~ /^SHORT/) {
 	    $allelesFound{$queryAllele}{$unique_id} = "SHORT";
@@ -2129,28 +2153,32 @@ sub run_st_finder{
 	my $count_alleles = scalar(keys %{$allelesFound{$allele}});
 	my $labels;
 
-	if($count_alleles > 1){ #means MC
+	foreach my $unique(keys %{$allelesFound{$allele}}){
+	    
+	    my $label = $allelesFound{$allele}{$unique};
 
-	    foreach my $unique(keys %{$allelesFound{$allele}}){
-
-		my $label = $allelesFound{$allele}{$unique};
-
+	    #Adds Ambig Flag
+	    if(exists $ambig_alleles->{$unique}){
+		$allelesFound{$allele}{$unique} = "AMBIG";
+	    }
+	    
+	    if($count_alleles > 1){ #Add MC flag
 		if(exists $labels->{$label}){
-
+		    
 		    $allelesFound{$allele}{$unique} = $label . "_MC";
-
+		    
 		    my $orig_label = $labels->{$label};
 		    $allelesFound{$allele}{$orig_label} = $label . "_MC";
-
+		    
 		}else{
-
-		    $labels->{$label} = $unique;
+		    
+			$labels->{$label} = $unique;
 		}
-
+	    
 	    }
-
 	}
     }
+
     
     #Determine which alleles have multiple variants
     my @multi_variants;
@@ -2234,7 +2262,6 @@ sub run_st_finder{
 
     #Goal: To print all combinations of ST types, with all
     #possible allele variations shown
-
     foreach my $allele (@{$allelesOrdered}) {
 
 	#Print new allele sequences to fasta file
@@ -2242,11 +2269,13 @@ sub run_st_finder{
 
 	    foreach my $a(keys $allelesFound{$allele}){
 	
-		if($allelesFound{$allele}{$a} eq 'NEW'){
+		if($allelesFound{$allele}{$a} =~ /NEW/){
 
-		    print $new_alleles_fh ">$allele\n" unless $new_alleles;
-		    print $new_alleles_fh "$query_sequences{$allele}{$a}\n" unless $new_alleles;
-
+		    #Do not want to count sequences that are ambigious as NEW
+		    unless(exists $ambig_alleles->{$a}){
+			print $new_alleles_fh ">$allele\n" unless $new_alleles;
+			print $new_alleles_fh "$query_sequences{$allele}{$a}\n" unless $new_alleles;
+		    }
 		}
 		
 	    }
@@ -2264,15 +2293,20 @@ sub run_st_finder{
 	$unique_variants->{$variant_string} = 1;
 
     }
-
+    
    # If the stKey exists in stMap, print both ST found and stKey to output file.
     foreach my $stKey (keys %$unique_variants){
 
 	my $ST;
 
-	if (exists $stMap->{$stKey}) {
+	#Replace Flags for multi copy so string would match original
+	#schema file
+	my $tempKey = $stKey;
+	$tempKey =~ s/\_MC//;
+	
+	if (exists $stMap->{$tempKey} && !($ambig_flag)) {
 
-	    $ST = $stMap->{$stKey};
+	    $ST = $stMap->{$tempKey};
 	}
 
 	# Otherwise, print "UNKNOWN" and stKey to output file.
