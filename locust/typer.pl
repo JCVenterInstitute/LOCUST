@@ -110,7 +110,7 @@ B<--input_path>      : Point to directory of fasta files
 
 B<--multi_copy>      : Flag to pull multi copy genes
 
-B<--skip_itol>	     : Skips making the itol annotation file
+B<--skip_itol>			 : Skips making the itol annotation file
 
 B<--help, h>         : Display this help message.
 
@@ -771,7 +771,7 @@ sub create_tree{
     $cmd .= " -o $OUTPUT";
     $cmd .= " -c $opts{config}";
     $cmd .= " -t $opts{tree}";
-    
+
     print $lfh "Running: $cmd\n";
     system($cmd);
 }
@@ -1261,7 +1261,7 @@ sub create_novel_files{
 	}
     }
 
-    print Dumper($ambig_alleles);exit;
+
     #Add post labels for MC and AMBIG alleles
     foreach my $genome(keys %$genome_st){
 	
@@ -1269,8 +1269,7 @@ sub create_novel_files{
 	    
 	    my $count_alleles = scalar(keys %{$genome_st->{$genome}->{$allele}});
 	    my $labels;
-
-	    print Dumper($genome_st);exit;
+    		    
 	    foreach my $unique(keys %{$genome_st->{$genome}->{$allele}}){
 		
 		my $label = $genome_st->{$genome}->{$allele}->{$unique};
@@ -2110,10 +2109,17 @@ sub run_st_finder{
 	
 	#Split name to get queryAllele
 	my($queryAllele,$scheme) = split(/\_/,$queryName,2);
-	my $unique_id = $queryAllele . ":" . $query_count;
 
+	my $unique_id = $queryAllele . ":" . $query_count;
+	
 	$allelesFound{$queryAllele}{$unique_id} = "NEW";
 	$query_sequences{$queryAllele}{$unique_id} = $querySeq;
+
+	#Check if sequence is ambigious
+	if($querySeq =~ /[^ATGCacgt+]/){
+	    $ambig_alleles->{$unique_id} = 1;
+	    $ambig_flag = 1;
+	}
 	
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
 	if ($querySeq =~ /^SHORT/) {
@@ -2125,7 +2131,7 @@ sub run_st_finder{
 	} elsif ($querySeq =~ /^3'PRTL/) {
 	    $allelesFound{$queryAllele}{$unique_id} = "3'PRTL";
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
-	    	    
+
 	    #Note: Different alleles COULD have the same sequence
 	    foreach my $mlstAlleleName(keys $alleleMap->{lc($querySeq)}){
 
@@ -2136,14 +2142,11 @@ sub run_st_finder{
 		    $allelesFound{$queryAllele}{$unique_id} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
 		}
 	    }
-	}elsif($querySeq =~ /[^ATGCacgt+]/){
-	    $ambig_alleles->{$unique_id} = 1;
-	    $ambig_flag = 1;
 	}
 
 	$query_count++;
     }
-
+    
     # Modify allelesFound to add _MC where the is a multi copy
     foreach my $allele(keys %allelesFound){
 
@@ -2160,7 +2163,6 @@ sub run_st_finder{
 	    }
 	    
 	    if($count_alleles > 1){ #Add MC flag
-		
 		if(exists $labels->{$label}){
 		    
 		    $allelesFound{$allele}{$unique} = $label . "_MC";
@@ -2547,9 +2549,9 @@ sub check_params{
     }elsif(!($opts{org_search} || $opts{biosample_list} || $opts{accession_list} || $opts{input_path})){
 	$error .= "ERROR: Option --input_file/-i is required\n";
     }
-    
+
     if($opts{seed_file}){
-	
+
 	if ($opts{seed_file} !~ /^\//) {
 	    $opts{seed_file} = "$START_CWD/$opts{seed_file}";
 	}
@@ -2557,22 +2559,20 @@ sub check_params{
     }elsif($opts{incrememnt}){
 	$error .= "ERROR: Option --seed_file is required when using the --incrememnt option\n";
     }
-    
-    if ($opts{download_schema}) {
-	if ($opts{scheme}) {
-	    $error .= "ERROR: Cannot use the download schema option when providing schema\n";
-	    die("ERROR: Cannot use the download schema option when providing schema.\n");
-	}
-	if ($opts{alleles}) {
-	    $error .= "ERROR: Cannot use the download schema option when providing alleles file\n";
-	    die("ERROR: Cannot use the download schema option when providing alleles file.\n");
-	}
-	if ($opts{seed_file}) {
-	    $error .= "ERROR: Cannot use the download schema option when providing a seed file\n";
-	    die("ERROR: Cannot use the download schema option when providing a seed file.\n");
-	}
-    }
-    
+		if ($opts{download_schema}) {
+			if ($opts{scheme}) {
+				$error .= "ERROR: Cannot use the download schema option when providing schema\n";
+				die("ERROR: Cannot use the download schema option when providing schema.\n");
+			}
+			if ($opts{alleles}) {
+				$error .= "ERROR: Cannot use the download schema option when providing alleles file\n";
+				die("ERROR: Cannot use the download schema option when providing alleles file.\n");
+			}
+			if ($opts{seed_file}) {
+				$error .= "ERROR: Cannot use the download schema option when providing a seed file\n";
+				die("ERROR: Cannot use the download schema option when providing a seed file.\n");
+			}
+		}
     unless($opts{download_schema}){
 	if($opts{scheme}){
 	    if ($opts{scheme} !~ /^\//) {
@@ -2644,10 +2644,6 @@ sub check_params{
 
     if($opts{hmm_model}){
 	$error .= "ERROR:$opts{hmm_model} does not exist or is size zero\n" unless(-s $opts{hmm_model});
-    }
-
-    if($opts{novel_schema} && $opts{schema}){
-	$error .= "ERROR: Can not use both --schema option and --novel_schema\n";
     }
 
     if($error){

@@ -189,104 +189,74 @@ while (<INFILE>) {
 	# e.g., gi|410113282|emb|CANR01000151.1|  ==> pipe characters break the script
 
 	#Only pull sequences that have max_mismatch or less number of nucleotides that can be not matched on either end of the blast alignment
-	if(!$short){
-	    
+  if(!$short){
 	    my $cutFasta = "$Bin/cutFasta -f $tokens[0] -x $tokens[8] -y $tokens[9] ";
 	    $cutFasta .= "-s \"$tokens[1]\" $fastafile";
-	    
+
 	    #print "cutFasta command: $cutFasta\n";
 	    print LOGFILE "cutFasta command: $cutFasta\n";
-	    
+
 	    my @seqlines = `$cutFasta`;
-	    my $header = $seqlines[0];
-	    my $fasta_sequence = join("", @seqlines[1 .. $#seqlines]);
-	    my $fasta_entry = $header . $fasta_sequence;
-	    
-	    open(my $stringfh, "<", \$fasta_entry) or die "Couldn't open sequence for reading: $!";
-	    
-	    my $seqio = Bio::SeqIO->new(
-		-fh => $stringfh,
-		-format => "fasta",
-		);
+      my $header = $seqlines[0];
+      my $fasta_sequence = join("", @seqlines[1 .. $#seqlines]);
+      my $fasta_entry = $header . $fasta_sequence;
 
-	    #Only 1 sequence
-	    my $sequence = $seqio->next_seq;
-	    my $translated_sequence = $sequence->translate(
-		-codontable_id => 11,
-		);
-	    my $nuc_length = $sequence->length;
-	    my $prot_length = $translated_sequence->length;
-	    my $pred_prot_seq = int($nuc_length / 3);
-	    
-	    if (-e $pepfile){
-		
-		open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
-	    
-	    } else {
-	
-		open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
-	    
-	    }
-	    
-	    print PEPFILE $header;
-	    print PEPFILE $translated_sequence->seq . "\n";
-	    close(PEPFILE);
-	    
-	    if (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") == -1) || index($translated_sequence->seq, "*") + 1 == $prot_length )) {
+      open(my $stringfh, "<", \$fasta_entry) or die "Couldn't open sequence for reading: $!";
+      my $seqio = Bio::SeqIO->new(
+                                  -fh => $stringfh,
+                                  -format => "fasta",
+                                  );
+      #Only 1 sequence
+      my $sequence = $seqio->next_seq;
+      my $translated_sequence = $sequence->translate(
+                                                    -codontable_id => 11,
+                                                    );
+      my $nuc_length = $sequence->length;
+      my $prot_length = $translated_sequence->length;
 
-		my $ambig_flag = 0;
-		
-		for my $seq (@seqlines) {
-		    #print $seq;
-		    print OUTFILE $seq;
-		    print LOGFILE $seq;
+      my $pred_prot_seq = int($nuc_length / 3);
+      if (-e $pepfile){
+          open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
+        } else {
+          open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
+        }
+        print PEPFILE $header;
+        print PEPFILE $translated_sequence->seq . "\n";
+        close(PEPFILE);
 
-		    $ambig_flag = 1 if($seq =~ /[^ATGCacgt+]/);
-		}
-		
-		print LOGFILE "WARN: Sequence contains ambigious characters\n" if $ambig_flag;
-	    
-	    } elsif (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") != -1) && index($translated_sequence->seq, "*" != $prot_length ))) {
-	
-		print OUTFILE "$header\n";
-		print OUTFILE "PSEUDO\n";
-		print LOGFILE "WARN: Printed PSEUDO as sequence because it had a premature stop when translated.\n";
-
-	    } else {
-
-		print OUTFILE ">$tokens[0]\n";
-		print OUTFILE "NEW\n";
-		print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit without a truncation event.\n";
-
-	    }
-
-	} else {
-
-	    if (($tokens[8] == $tokens[13] || $tokens[8] == 1) && ($perc_matched < 1)){
-		
-		print OUTFILE ">$tokens[0]\n";
-		print OUTFILE "5'PRTL\n";
-		print LOGFILE "WARN: Printed 5'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
-	    
-	    } elsif (($tokens[9] == $tokens[13] || $tokens[9] == 1) && ($perc_matched < 1)){
-		
-		print OUTFILE ">$tokens[0]\n";
-		print OUTFILE "3'PRTL\n";
-		print LOGFILE "WARN: Printed 3'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
-	    
-	    } else {
-		
-		print OUTFILE ">$tokens[0]\n";
-		print OUTFILE "SHORT\n";
-		print LOGFILE "WARN: Printed SHORT as sequence because unaligned nucleotides were greater than $max_mismatch cutoff\n";
-	    }
-	}
-	
-	
-	print LOGFILE "\n\n";
-    
+      if (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") == -1) || index($translated_sequence->seq, "*") + 1 == $prot_length )) {
+  	    for my $seq (@seqlines) {
+  		      #print $seq;
+  	    print OUTFILE $seq;
+  	    print LOGFILE $seq;
+  	    }
+    } elsif (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") != -1) && index($translated_sequence->seq, "*" != $prot_length ))) {
+        print OUTFILE "$header\n";
+        print OUTFILE "PSEUDO\n";
+        print LOGFILE "WARN: Printed PSEUDO as sequence because it had a premature stop when translated.\n";
+    } else {
+        print OUTFILE ">$tokens[0]\n";
+        print OUTFILE "NEW\n";
+        print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit without a truncation event.\n";
     }
-
+} else {
+  if (($tokens[8] == $tokens[13] || $tokens[8] == 1) && ($perc_matched < 1)){
+      print OUTFILE ">$tokens[0]\n";
+      print OUTFILE "5'PRTL\n";
+      print LOGFILE "WARN: Printed 5'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
+  } elsif (($tokens[9] == $tokens[13] || $tokens[9] == 1) && ($perc_matched < 1)){
+      print OUTFILE ">$tokens[0]\n";
+      print OUTFILE "3'PRTL\n";
+      print LOGFILE "WARN: Printed 3'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
+    } else {
+	    print OUTFILE ">$tokens[0]\n";
+	    print OUTFILE "SHORT\n";
+	    print LOGFILE "WARN: Printed SHORT as sequence because unaligned nucleotides were greater than $max_mismatch cutoff\n";
+	}
+}
+	#print "\n\n";
+	print LOGFILE "\n\n";
+    }
 }
 
 close (INFILE);
