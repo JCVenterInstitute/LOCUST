@@ -37,6 +37,7 @@ GetOptions( \%opts, 'output|o=s',
 	    'input_file|i=s',
 	    'type|t=s',
 	    'config|c=s',
+	    'exclude_genomes|e=s',
 	    'seed_file|s=s') || die "Error getting options! $!";
 
 my ($MUSCLE_CMD,$TRIM_CMD,$FASTTREE,$RAXML_CMD) = parse_config($opts{config});
@@ -59,12 +60,14 @@ mkdir ("$OUTPUT/alleles") unless (-d "$OUTPUT/alleles");
 chdir ("$OUTPUT/alleles") or die "Cannot create or access directory '$OUTPUT/alleles': $!\n";
 
 #grab genome and allele identifiers from input (genomes.txt) and seed (seed.fa) files
-my @glines = read_file("$opts{input_file}");
+my $glines = make_genome_array($opts{input_file});
 my %genomes_seen = ();
 my @genomes = ();
 my $header = 1;
-    
-foreach my $gline (@glines){
+
+print Dumper($glines);
+exit;
+foreach my $gline (@$glines){
     chomp $gline;
     #extract genome field
     
@@ -277,6 +280,29 @@ if(-s $infasta){
 }
 exit(0);
 
+sub make_genome_array{
+
+    my $file = shift;
+    my @tmp_lines = read_file($file);
+    my @final_lines;
+    
+    if($opts{exclude_genomes}){
+	my $hsh;
+	
+	my @e_genomes = read_file($opts{exclude_genome});
+
+	map{$hsh->{$_} = 1} @e_genomes;
+       
+	foreach (@tmp_lines){
+	    push(@final_lines, $_) unless exists $hsh->{$_};
+	}
+
+	return(\@final_lines);
+    }else{
+
+	return(\@tmp_lines);
+    }
+}
 sub parse_config{
 
     my $cfg = Config::IniFiles->new(-file => "$opts{config}");
