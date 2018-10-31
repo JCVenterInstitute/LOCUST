@@ -241,7 +241,11 @@ while (<INFILE>) {
 		    print OUTFILE $seq;
 		    print LOGFILE $seq;
 
-		    $ambig_flag = 1 if($seq =~ /[^ATGCacgt+]/);
+		    unless($seq =~ /^>/){
+			chomp $seq;
+			
+		        $ambig_flag = 1 if($seq =~ /[^ATGCacgt+]/);
+		    }
 		}
 		
 		print LOGFILE "WARN: Sequence contains ambigious characters\n" if $ambig_flag;
