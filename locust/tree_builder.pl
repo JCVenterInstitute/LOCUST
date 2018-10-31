@@ -59,11 +59,11 @@ mkdir ("$OUTPUT/alleles") unless (-d "$OUTPUT/alleles");
 chdir ("$OUTPUT/alleles") or die "Cannot create or access directory '$OUTPUT/alleles': $!\n";
 
 #grab genome and allele identifiers from input (genomes.txt) and seed (seed.fa) files
-my @glines = read_file("$opts{input_file}");
+my @glines = read_file($opts{input_file});
 my %genomes_seen = ();
 my @genomes = ();
 my $header = 1;
-    
+
 foreach my $gline (@glines){
     chomp $gline;
     #extract genome field
