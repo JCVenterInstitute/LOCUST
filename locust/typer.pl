@@ -295,12 +295,12 @@ if($opts{hmm_model}){
 my $increment_combined_list = &combined_genome_lists($input_file,\@ORIG_GENOME_LIST);
 
 #Run seq type with input file
-my($st_files,$fa_files,$top_seqs_files,$multi_copy_logs);
+my($st_files,$fa_files,$top_seqs_files,$multi_copy_logs,$exclude_file);
 
 if($opts{retype}){
-    ($st_files,$fa_files,$top_seqs_files,$multi_copy_logs) = run_seq_type($increment_combined_list);
+    ($st_files,$fa_files,$top_seqs_files,$multi_copy_logs,$exclude_file) = run_seq_type($increment_combined_list);
 }else{
-    ($st_files,$fa_files,$top_seqs_files,$multi_copy_logs) = run_seq_type($input_file);
+    ($st_files,$fa_files,$top_seqs_files,$multi_copy_logs,$exclude_file) = run_seq_type($input_file);
 }
 
 #Cat all output files from each genome to into final output
@@ -389,14 +389,26 @@ unless($opts{skip_itol}){
 if($opts{tree}){
     my $tree_input_file;
     $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
-    &create_tree($opts{tree},$tree_input_file);
-    &strain_approximation();
+    
+    &create_tree($opts{tree},$tree_input_file,$exclude_file);
+    
+    #&strain_approximation();
 }
 
 &cleanup_files;
 
 print $lfh "|Finished typer.pl "  .  localtime() . "\n";
 #############################################
+sub make_exclude_file{
+
+    my $list = shift;
+    my $file_name = "$OUTPUT/exclude_genome.list";
+    my $fh = path($file_name)->filehandle(">");
+
+    map{print $fh "$_\n"} @$list;
+    return($file_name);
+}
+
 sub create_input_file{
 
     my $dir = shift;
@@ -763,7 +775,7 @@ sub parse_config{
 sub create_tree{
     print $lfh "|Step: Creating $opts{tree} tree\n";
 
-    my ($tree_type,$input_file) = @_;
+    my ($tree_type,$input_file,$exclude_file) = @_;
 
     my $cmd = "perl $Bin/tree_builder.pl";
     $cmd .= " -i $input_file";
@@ -771,6 +783,7 @@ sub create_tree{
     $cmd .= " -o $OUTPUT";
     $cmd .= " -c $opts{config}";
     $cmd .= " -t $opts{tree}";
+    $cmd .= " -e $exclude_file" if $opts{exclude_genomes};
     
     print $lfh "Running: $cmd\n";
     system($cmd);
@@ -1684,7 +1697,8 @@ sub run_seq_type{
     my $header = 1;
 
     my $tfh = path("$OUTPUT/logs/tophits.log")->filehandle(">");;
-
+    my @exclude_genomes;
+    
     foreach my $line (@lines){
 
 	chomp $line;
@@ -1769,22 +1783,24 @@ sub run_seq_type{
 	push(@multi_copy, $th_log) if(-s $th_log);
 	
 	my ($st_out,$fa_out);
-
+	
 	if($opts{novel_schema}){
 
 	    push(@fa_files,$top_seqs_file);
 
 	}else{
-
-	    ($st_out,$fa_out) = run_st_finder($top_seqs_file, $genome, $new_alleles, \%stMap, \%alleleMap, \@allelesOrdered, \%stAttributes, $genomeAttributes, $genomeHeader) ;
+	    my $exclude_genome;
+	    
+	    ($st_out,$fa_out,$exclude_genome) = run_st_finder($top_seqs_file, $genome, $new_alleles, \%stMap, \%alleleMap, \@allelesOrdered, \%stAttributes, $genomeAttributes, $genomeHeader) ;
 	    push(@fa_files,$fa_out);
 	    push(@st_files,$st_out);
-
+	    push(@exclude_genomes,$exclude_genome) if $exclude_genome;
 	}
 
-    }
+    }       
 
-
+    my $exclude_file = make_exclude_file(\@exclude_genomes);
+    
     #Add previous genome's list output files
     unless($opts{retype}){
 	if($opts{original_input_file}){
@@ -1809,7 +1825,7 @@ sub run_seq_type{
 	}
     }
 
-    return(\@st_files,\@fa_files,\@top_seqs_files,\@multi_copy);
+    return(\@st_files,\@fa_files,\@top_seqs_files,\@multi_copy,$exclude_file);
 }
 
 sub clean_fasta_file{
@@ -2289,6 +2305,8 @@ sub run_st_finder{
 	$unique_variants->{$variant_string} = 1;
 
     }
+
+    my $exclude_genome; #Stores genomes with missing or short alleles to exclude in tree builder
     
    # If the stKey exists in stMap, print both ST found and stKey to output file.
     foreach my $stKey (keys %$unique_variants){
@@ -2314,6 +2332,8 @@ sub run_st_finder{
 
 	print $output_fh "$identifier\t$ST\t$stKey";
 
+	$exclude_genome = $identifier if($stKey =~ /(MISSING|SHORT)/);
+	
 	if (keys %{ $stAttributes }) {
 	    print $output_fh "\t$stAttributes->{$ST}";
 	}
@@ -2325,7 +2345,7 @@ sub run_st_finder{
 	print $output_fh "\n";
     }
 
-    return($outputfile,$new_alleles_file);
+    return($outputfile,$new_alleles_file,$exclude_genome);
 }
 sub grow_variants {
 

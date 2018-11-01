@@ -37,6 +37,7 @@ GetOptions( \%opts, 'output|o=s',
 	    'input_file|i=s',
 	    'type|t=s',
 	    'config|c=s',
+	    'exclude_genome|e=s',
 	    'seed_file|s=s') || die "Error getting options! $!";
 
 my ($MUSCLE_CMD,$TRIM_CMD,$FASTTREE,$RAXML_CMD) = parse_config($opts{config});
@@ -60,38 +61,58 @@ chdir ("$OUTPUT/alleles") or die "Cannot create or access directory '$OUTPUT/all
 
 #grab genome and allele identifiers from input (genomes.txt) and seed (seed.fa) files
 my @glines = read_file($opts{input_file});
+
+#Store exclude genomes
+my @ex_genomes = read_file($opts{exclude_genome}) if($opts{exclude_genome});
+my $ex_hsh;
+
+foreach (@ex_genomes){
+
+    chomp;
+    $ex_hsh->{$_} = 1;
+    
+}
+
 my %genomes_seen = ();
 my @genomes = ();
 my $header = 1;
 
 foreach my $gline (@glines){
     chomp $gline;
-    #extract genome field
-    
-    if ($header) {#check if first line is a header
-	if ($gline =~ /^GENOME\tPATH/) {
-	    $header = 0;
-	    next;
-	}
-	$header = 0;
-    }
+
     my ($genome) = split(/\t/, $gline);
-    $genome =~ s/\s+$//; #remove trailing spaces
-
-    if(exists $genomes_seen{$genome}){
-	print $lfh "WARNING: a genome is allowed to occur only once in the genome list file - ignoring the second line.\n";
-	print $lfh "$gline\n$genomes_seen{$genome}\n";
-	next;
+    
+    if(exists $ex_hsh->{$genome}){
+	print $lfh "Warning: Skipping $genome because it was included in the exclude genome list for having a MISSING or SHORT allele sequence\n";
     }else{
-	$genomes_seen{$genome} = $gline;
-    }
+	#extract genome field
+	
+	if ($header) {#check if first line is a header
+	    if ($gline =~ /^GENOME\tPATH/) {
+		$header = 0;
+		next;
+	    }
+	$header = 0;
+	}
 
-    if(-s "$OUTPUT/$genome/$genome" . "_hits.txt"){
-	push (@genomes, $genome);
-    }else{
-	print $lfh "WARNING: Skipping $genome because there are no blast hits\n";
+	$genome =~ s/\s+$//; #remove trailing spaces
+	
+	if(exists $genomes_seen{$genome}){
+	    print $lfh "WARNING: a genome is allowed to occur only once in the genome list file - ignoring the second line.\n";
+	    print $lfh "$gline\n$genomes_seen{$genome}\n";
+	    next;
+	}else{
+	    $genomes_seen{$genome} = $gline;
+	}
+	
+	if(-s "$OUTPUT/$genome/$genome" . "_hits.txt"){
+	    push (@genomes, $genome);
+	}else{
+	    print $lfh "WARNING: Skipping $genome because there are no blast hits\n";
+	}
     }
 }
+
 write_file ("genome_list.txt", map { "$_\n" } @genomes);
 
 my @alines = read_file("$opts{seed_file}");
