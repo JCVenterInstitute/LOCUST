@@ -43,6 +43,7 @@ use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use Pod::Usage;
 use Data::Dumper;
 use Path::Tiny;
+use Bio::SeqIO;
 
 my %opts;
 
@@ -54,7 +55,7 @@ pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 
 &check_params;
 
-my $fh = path($opts{input_file})->filehandle("<");
+#my $fh = path($opts{input_file})->filehandle("<");
 my $lfh = path("make_allele_file.log")->filehandle(">");
 
 my ($current_seq, $current_header);
@@ -64,43 +65,37 @@ my ($in_count,$nr_count) = (0,0);
 
 #Loop through fasta file
 #Collect header and sequence and store in hash
-while(<$fh>){
-    
-    my $line = $_;
-    $line =~ s/\s+$//;
-   
-    if($line =~ /^>(.*)/){
 
-	if($current_seq){
+my $fh = Bio::SeqIO->new(-file => $opts{input_file},
+		      -format => 'Fasta');
+
+#Read sequences and store unique ones
+#While keeping track of headers of all sequences
+while(my $seq = $fh->next_seq){
+    $in_count++;
+
+    my $sequence = lc($seq->seq);
+    my $header = $seq->display_id;
+
+    if(exists $seq_hsh->{$sequence}){
+	
+	print $lfh "Duplicate sequence: $header\n";
+	print $lfh "Matches:";
+
+	foreach (keys %{$seq_hsh->{$sequence}}){
+	    my @s = @{$seq_hsh->{$sequence}->{$_}};
+	    print $lfh "$s[0]\n\n";
 	    
-	    $in_count++;
-	    
-	    #Find prefix and strip intital numbering
-	    my($a,$n) = split(/_/,$current_header);
-	    $allele_count->{$a} = 1;
-		
-	    #Store previous found sequence with its header
-	    $seq_hsh->{$current_seq}->{$a} = 1;
-	    
-	    #Reset current_seq variable
-	    $current_seq = "";
-	   
 	}
-
-	#Store and account for new header
-	$current_header = $1;
-
+	
     }else{
+	
+	my($a,$n) = split(/_/,$header);
+	push(@{$seq_hsh->{$sequence}->{$a}},$header);
+	$allele_count->{$a} = 1;
 
-	#append sequence as it spans multiple lines
-	$current_seq .= $line;
     }
 }
-
-#Push final sequence
-my($a,$n) = split(/_/,$current_header);
-$seq_hsh->{$current_seq}->{$a} = 1;
-$in_count++;
 
 #Print new multi fasta files with non redundant sequences and
 #new numbering
@@ -110,17 +105,17 @@ my $ofh = path("$v[0].nr")->filehandle(">");
 
 #Go through each sequence to print
 foreach my $seq (keys %$seq_hsh){
-    my $seq_chunk;
     
+    my $seq_chunk;    
     my @allele_matches = keys %{$seq_hsh->{$seq}};    
 
     #Print warning of duplicate alleles w/ duplicate sequence
-    my $m = "WARNING: " . join(",",@allele_matches) . " from ($opts{input_file}) have same sequence" ;
+    my $m = "WARNING: " . join(",",@allele_matches) . " from have same sequence" ;
     print_log($m) if (scalar @allele_matches > 1);
 
     #remove trailing number if one
-    
-    foreach my $allele(keys %{$seq_hsh->{$seq}}){
+    foreach my $allele(@allele_matches){
+
 	#Print new header line
 	print $ofh ">$allele" . "_" . "$allele_count->{$allele}\n";
 	
@@ -132,6 +127,7 @@ foreach my $seq (keys %$seq_hsh){
 	#Print sequence
 	print $ofh "$seq_chunk";
 
+	#increment allele count for new trailing number
 	$allele_count->{$allele}++;
 	
 	#increment count of new entries being printed
