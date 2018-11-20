@@ -50,6 +50,7 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --input_path
                          --multi_copy
                          --skip_itol
+                         --itol_text
                          --help
 
 =head1 OPTIONS
@@ -112,6 +113,8 @@ B<--multi_copy>      : Flag to pull multi copy genes
 
 B<--skip_itol>			 : Skips making the itol annotation file
 
+B<--itol_text>			: Makes an ITOL text annotation file instead of a colored strip annotation file.
+
 B<--help, h>         : Display this help message.
 
 =head1  DESCRIPTION
@@ -136,6 +139,7 @@ https://www.ncbi.nlm.nih.gov/pubmed/28130240
     ebeck@jcvi.org
 
 =cut
+
 
 use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use Capture::Tiny qw{ capture capture_merged};
@@ -195,6 +199,7 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'input_path=s',
 	    'multi_copy',
 	    'skip_itol',
+			"itol_text",
 	    'help|h') || die "Error getting options! $!";
 
 
@@ -295,12 +300,12 @@ if($opts{hmm_model}){
 my $increment_combined_list = &combined_genome_lists($input_file,\@ORIG_GENOME_LIST);
 
 #Run seq type with input file
-my($st_files,$fa_files,$top_seqs_files);
+my($st_files,$fa_files,$top_seqs_files, $ST_type_size, $ST_attr_size);
 
 if($opts{retype}){
-    ($st_files,$fa_files,$top_seqs_files) = run_seq_type($increment_combined_list);
+    ($st_files,$fa_files,$top_seqs_files, $ST_type_size, $ST_attr_size) = run_seq_type($increment_combined_list);
 }else{
-    ($st_files,$fa_files,$top_seqs_files) = run_seq_type($input_file);
+    ($st_files,$fa_files,$top_seqs_files, $ST_type_size, $ST_attr_size) = run_seq_type($input_file);
 }
 
 #Cat all output files from each genome to into final output
@@ -348,7 +353,7 @@ if($opts{append_schema}){
 
     #Run seq type with new alleles
     print $lfh "|Step: Run seq typer on new alleles\n";
-    my($nst_files,$nfa_files) = run_seq_type($input_file,$combined_alleles);
+    my($nst_files,$nfa_files,$_,$ST_type_size,$ST_attr_size) = run_seq_type($input_file,$combined_alleles);
 
     #Cat all new ST files together
     my $new_st_file = "$append_outdir/tmp_allele_ST.out";
@@ -379,14 +384,19 @@ unless($opts{skip_itol}){
 	} else {
 		$st_file = "$OUTPUT/ST_all.out";
 	}
-	&create_itol_file($st_file);
+
+	if ($opts{itol_text}){
+		&create_itol_file($st_file, 'text', $ST_type_size, $ST_attr_size);
+	} else {
+		&create_itol_file($st_file, 'color', $ST_type_size, $ST_attr_size);
+	}
 }
 
 if($opts{tree}){
     my $tree_input_file;
     $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
     &create_tree($opts{tree},$tree_input_file);
-		&strain_approximation()
+		&strain_approximation($ST_type_size, $ST_attr_size)
 }
 
 &cleanup_files;
@@ -773,12 +783,14 @@ sub create_tree{
 }
 
 sub strain_approximation{
-
+	my ($ST_type_size, $ST_attr_size) = @_;
 	print $lfh "|Step: Generating st approximations.\n";
 
 	my $cmd = "perl $Bin/strain_approximation.pl";
 	$cmd .= " -i $opts{input_file}";
 	$cmd .= " -s ST_all.out";
+	$cmd .= " -t $ST_type_size";
+	$cmd .= " -a $ST_attr_size";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
 }
 
@@ -1510,7 +1522,7 @@ sub run_seq_type{
     my @allelesOrdered;                     # array of allele names in order expected by ST-schema.
     my $append = (defined $new_alleles) ? 1 : 0;
 
-    &init_st_finder($opts{scheme}, (defined $new_alleles) ? $new_alleles : $opts{alleles}, \%stMap, \%alleleMap, \@allelesOrdered, \%stAttributes, $append) unless($opts{novel_schema});
+    my ($ST_type_size, $ST_attr_size) = &init_st_finder($opts{scheme}, (defined $new_alleles) ? $new_alleles : $opts{alleles}, \%stMap, \%alleleMap, \@allelesOrdered, \%stAttributes, $append) unless($opts{novel_schema});
 
     #Open input file and loop through genomes
     my @lines = read_file($input_file);
@@ -1643,7 +1655,7 @@ sub run_seq_type{
 	}
     }
 
-    return(\@st_files,\@fa_files,\@top_seqs_files);
+    return(\@st_files,\@fa_files,\@top_seqs_files, $ST_type_size, $ST_attr_size);
 }
 
 sub clean_fasta_file{
@@ -1880,7 +1892,7 @@ sub init_st_finder{
     foreach my $allele (keys %{$alleles_seen_ST}) {
 	foreach my $id (keys $alleles_seen_ST->{$allele}) {
 	    if (!defined $alleles_seen_alleles->{$allele}{$id}) {
-		print STDERR "WARNING: Allele $allele\_$id is in $scheme_file but not in $alleles_file.\n";
+				print STDERR "WARNING: Allele $allele\_$id is in $scheme_file but not in $alleles_file.\n";
 	    }
 	}
     }
@@ -1895,7 +1907,7 @@ sub init_st_finder{
 	}
     }
 
-    return;
+    return($ST_type_size, $ST_attr_size);
 }
 sub run_st_finder{
     my($top_seqs_file, $identifier, $new_alleles, $stMap, $alleleMap, $allelesOrdered, $stAttributes, $genomeAttributes, $genomeHeader) = @_;
@@ -2234,9 +2246,12 @@ sub copy_genome_sequences{
 }
 
 sub create_itol_file{
-	my $typer_file = shift;
+	my ($typer_file, $data_type, $ST_type_size, $ST_attr_size) = @_;
 	my $cmd = "perl $Bin/create_itol.pl";
 	$cmd .= " --input_file $typer_file";
+	$cmd .= " --data_type $data_type";
+	$cmd .= " --type_size $ST_type_size";
+	$cmd .= " --attr_size $ST_attr_size";
 	print $lfh "|Step: Creating ITOL Annotation file.";
 	print $lfh "Running $cmd\n";
 	system($cmd) == 0 || die("ERROR: $cmd failed");

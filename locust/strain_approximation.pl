@@ -4,7 +4,8 @@ use Pod::Usage;
 use Data::Dumper;
 use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use List::Util;
-
+use FindBin qw($Bin);
+use lib "$Bin";
 #Collect Inputs
 =head1 NAME
 
@@ -22,6 +23,10 @@ strain_approximation.pl -  A script to approximate ST's using Multiple Sequence
 B<--typer_input_file, i> : Sequence File List
 
 B<--st_results, s>   : ST_all.out file from typer.pl run.
+
+B<--type_alleles, t> : Number of alleles in schema.
+
+B<--attributes, a> : Number of attributes in the input.
 
 B<--help, h>         : Display this help message.
 
@@ -41,6 +46,8 @@ GetOptions(\%opts,
 	'help|h',
 	'typer_input_file|i=s',
 	'st_results|s=s',
+	'type_alleles|t=i',
+	'attributes|a=i',
 ) || die "Error getting options! $!";
 
 pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
@@ -48,18 +55,23 @@ pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 my $stfile = $opts{st_results};
 my $typer_input_file = $opts{typer_input_file};
 
-my (@header, %st_designations, %st_calls);
+my (@header, %st_designations, %st_calls, %new_genomes);
 open(my $st, '<', $stfile) or die "Couldn't open $stfile\n";
 my $header_seen = 0;
 while (<$st>){
 	my $line = $_;
+	chomp $line;
 	if ($header_seen == 0){
-		@header = split("\t",$line);
+		my @pre_header = split("\t",$line);
+		@header = @pre_header[0 .. $opts{type_alleles} + 1];
 		$header_seen = 1;
 } else {
 		my @line_values = split("\t", $line);
 		chomp @line_values;
-		$st_designations{$line_values[0]} = join("\t", @line_values[1 .. $#line_values]);
+        if ("NEW" ~~ @line_values){
+            $new_genomes{$line_values[0]} = "APPROXIMATE";
+        }
+		$st_designations{$line_values[0]} = join("\t", @line_values[1 .. $opts{type_alleles} + 1]);
 		$st_calls{$line_values[0]} = $line_values[1];
 	}
 }
@@ -81,175 +93,200 @@ while (<$th>){
 		$attributeHash{$genome} = $line_values[2];
 	}
 }
-if ($type_strains < 2){
-	print "ERROR: There are too few defined type strains from the input. Can't approximate type strain.\n";
+
+my @typeStrains;
+while (my ($key, $value) = each(%attributeHash)) {
+    if ($value ne ""){
+			push (@typeStrains, $key);
+		}
+}
+
+&generate_dist_mat($type_strains);
+my $values_hash = &parse_dist_mat();
+my $type_strain_hashes = &sort_hashes(\%$values_hash, \@typeStrains);
+my %type_strain_hashes = %$type_strain_hashes;
+
+
+my @st_out_header = @header;
+my @add_to_st_out_header = ("Best Hit", "Second Best Hit");
+push @st_out_header, @add_to_st_out_header;
+
+my @st_approx_header = @header;
+my @add_to_st_approx_header = ("Best Hit ID", "Best Hit Attribute", "Best Hit ST", "Best Hit Distance", "Second Best Hit ID", "Second Best Hit Attribute", "Second Best Hit ST", "Second Best Hit Distance");
+push @st_approx_header, @add_to_st_approx_header;
+
+
+open(my $st_all, '>', "ST_all_test.out") or die "Couldn't open ST_all.out\n";
+open(my $st_approx, '>', "ST_approx.details") or die "Couldn't open ST_approx.details\n";
+
+print $st_all join("\t", @st_out_header) . "\n";
+print $st_approx join("\t", @st_approx_header) . "\n";
+
+foreach my $key (keys %st_designations){
+
+    my @st_approx_list = $key;
+	push (@st_approx_list,  split("\t", $st_designations{$key}));
+	my @st_out_list = @st_approx_list;
+	#Add best two Type Strains to ST_OUT
+	#Looking at a defined type strain-- only report itself
+	if ($attributeHash{$key}){
+			#Add itself to ST_all.out
+			push (@st_out_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+			#Add info to ST_approx
+			push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Sample"});
+			push (@st_approx_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+			push (@st_approx_list, $st_calls{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+			push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Identity"});
+	} else {
+        if (exists $new_genomes{$key}){
+    		push (@st_out_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+    		push (@st_out_list, $attributeHash{$type_strain_hashes->{$key}->{2}->{"Sample"}});
+
+    		#Add info to ST_APPROX
+    		push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Sample"});
+    		push (@st_approx_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+    		push (@st_approx_list, $st_calls{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+    		push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Identity"});
+
+    		push (@st_approx_list, $type_strain_hashes->{$key}->{2}->{"Sample"});
+    		push (@st_approx_list, $attributeHash{$type_strain_hashes->{$key}->{2}->{"Sample"}});
+    		push (@st_approx_list, $st_calls{$type_strain_hashes->{$key}->{2}->{"Sample"}});
+    		push (@st_approx_list, $type_strain_hashes->{$key}->{2}->{"Identity"});
+    	 }
+     }
+		print $st_all join( "\t", map { defined $_ ? $_ : '' } @st_out_list ) . "\n";
+		print $st_approx join( "\t", map { defined $_ ? $_ : '' } @st_approx_list ) . "\n";
+}
+
+
+sub generate_dist_mat{
+	my $type_strains = shift;
+	if ($type_strains < 2){
+		print "ERROR: There are too few defined type strains from the input. Can't approximate type strain.\n";
+		exit();
+	} else {
+	#Run muscle to create aligned
+	my $aligned_file = "allGenomesJoinedAlleles.fasta";
+	if (-e $aligned_file){
+	my $distance_matrix_command = "Rscript";
+	$distance_matrix_command .= " $Bin/distance_matrix_generation.R $aligned_file";
+	system($distance_matrix_command) == 0 || die "\n";
 } else {
-#Run muscle to create aligned
-my $aligned_file = "allGenomesJoinedAlleles.fasta";
-my $distmat_out = "allGenomesJoinedAlleles.distmat";
-my $distmat_command = "distmat -nucmethod 0 -outfile $distmat_out $aligned_file";
-system($distmat_command) == 0 || die "\n";
-
-my @n_by_n_distance_array;
-open(my $fh, '<', $distmat_out) or die "Couldn't open $distmat_out\n";
-
-my $row = 0;
-my $num_of_genomes;
-my %genome_idx;
-while (<$fh>){
-  my $line = $_;
-  if ($line =~ /^\t/){
-    #distmat output = 1st line of interest begins with tab
-    my @split_line = split("\t", $line);
-    #Header Row -- Used to initialize Matrix
-    if ($row == 0){
-      $num_of_genomes = $#split_line;
-      push @n_by_n_distance_array, [(0) x $num_of_genomes] for 0 .. $num_of_genomes; #initialize n x n array of size # of genomes
-      for (my $col =0; $col < $num_of_genomes; $col++){
-        my $val = $split_line[$col +1];  #First line is empy tab
-        $val =~ s/^\s+|\s+$//g;
-        $n_by_n_distance_array[$row][$col] = $val;
-      }
-      $row = $row + 1;
-    } else {
-      my ($genome, $idx) = split(" ", $split_line[-1]);
-      $genome_idx{$idx - 1} = $genome;
-      for (my $col =0; $col < $num_of_genomes; $col++){
-        my $val = $split_line[$col +1];  #First line is empy tab
-        $val =~ s/^\s+|\s+$//g;
-        $n_by_n_distance_array[$row][$col] = $val;
-      }
-        $row++;
-    }
-  }
+	exit("Couldn't find the MUSCLE generated alignment file.\n");
 }
-
-for (my $row_idx = 1; $row_idx <= $num_of_genomes; $row_idx++){ #row_idx 0 is the header
-  for (my $col_idx = 0; $col_idx < $num_of_genomes; $col_idx++){
-    if ($n_by_n_distance_array[$row_idx][$col_idx] eq ""){
-      #print "$row_idx\t$col_idx\n";
-      #print "ROW:" . ($row_idx - 1) . "\n";
-      #print "COL:" . ($col_idx + 1) . "\n";
-      $n_by_n_distance_array[$row_idx][$col_idx] = $n_by_n_distance_array[$col_idx + 1][$row_idx - 1];
-    }
-  }
-}
-
-#Now iterate over each row to get closest
-my @row_hashes;
-for (my $matrix_row = 1; $matrix_row <= $num_of_genomes; $matrix_row ++){
-  my %row_values;
-  my $genome_being_examined = $matrix_row - 1; #Key for %genome_idx
-  my $genome = $genome_idx{$genome_being_examined};
-  #Iterate over values in row
-  for (my $col = 0; $col < $num_of_genomes; $col++){
-      my $row_value = abs($n_by_n_distance_array[$matrix_row][$col]);
-      $row_values{$col} = $row_value;
-
-  }
-  push (@row_hashes, \%row_values);
-}
-
-#Hash of Genome to Best Hit(s)
-my %out_st_line;
-my %st_all_out;
-#Generate Sorted Arrays of Hits and Values (smallest -> largest)
-for (my $i = 0; $i < $#row_hashes; $i++){
-  my %row_hash = %{$row_hashes[$i]};
-  my $genome = $genome_idx{$i};
-	my @hit_names;
-  my @hit_values;
-  my $best_hit = 10000; #Arbitrarily High
-  foreach my $hit_name (sort {$row_hash{$a} <=> $row_hash{$b} } keys %row_hash){
-    push @hit_names, $genome_idx{$hit_name};
-    push @hit_values, $row_hash{$hit_name};
-  }
-  my $out_file = $genome . "/" . $genome . "_sorted_distances.txt";
-  open(my $of, ">", $out_file) or die "Couldn't open file $out_file.\n";
-    print $of join("\t", @hit_names) . "\n";
-    print  $of join("\t", @hit_values) . "\n";
-	my @allele_calls = split("\t", $st_designations{$genome});
-	my @st_array = @allele_calls;
-	my $st_call = $allele_calls[0];
-	my @possible_indices;
-	for (my $i = 0; $i < $#hit_values; $i++){
-		 	my $hit_name = $hit_names[$i];
-			if ($attributeHash{$hit_name}){ #If current hit name has a defined 3rd column of metadata
-				push @possible_indices, $i;
-		}
- }
- my %possible_hit_info;
- for my $val (@possible_indices){
-	 			my $genome = $hit_names[$val];
-				my $dist = $hit_values[$val];
-				push (@{$possible_hit_info{$dist}}, $genome);
- }
-	my %best_hit;
-	my %second_best_hit;
-	my $count = 0;
-	foreach my $val (sort {$a <=> $b} keys %possible_hit_info){
-		$count = $count + 1;
-		if ($count == 1){
-			$best_hit{$val} = $possible_hit_info{$val};
-	} elsif ($count == 2){
-		$second_best_hit{$val} = $possible_hit_info{$val};
 	}
 }
-	my $best_hit_val = (keys %best_hit)[0];
-	my @best_hits = (values %best_hit)[0];
-	my $second_best_hit_val = (keys %second_best_hit)[0];
-	my @second_best_hits = (values %second_best_hit)[0];
-	my @best_hit_names;
-	my @best_hits_sts;
-	my @best_hit_attribute;
-	my @second_best_hit_names;
-	my @second_best_hits_sts;
-	my @second_best_hit_attribute;
-	foreach my $hit_list (@best_hits){
-		foreach my $hit (@{$hit_list}){
-			push(@best_hit_names, $hit);
-			push(@best_hits_sts, $st_calls{$hit});
-			push(@best_hit_attribute, $attributeHash{$hit});
+
+sub parse_dist_mat{
+	open(my $fh, '<', "allGenomesJoinedAlleles.dist") or die "Couldn't open allGenomesJoinedAlleles.dist\n";
+	my $header = 0;
+	my %header_hash;
+
+	my %values_hash;
+	while(<$fh>){
+		my $line = $_;
+		my @split_line = split(",", $line);
+		if ($header == 0){
+			# $i = 0 is the index column
+			for (my $i=0; $i < scalar @split_line; $i++){
+				my $genome = $split_line[$i];
+				chomp $genome;
+				$header_hash{$i} = $genome;
+				$header = 1;
+				}
+		} else {
+			my $sample = $split_line[0];
+			for (my $i=1; $i < scalar @split_line; $i++){
+				my $val = $split_line[$i];
+				chomp $val;
+				my $current_genome = $header_hash{$i};
+				$values_hash{$sample}{$current_genome} = $val;
+				}
 		}
 	}
-	foreach my $hit_list (@second_best_hits){
-		foreach my $hit (@{$hit_list}){
-			push (@second_best_hit_names, $hit);
-			push(@second_best_hits_sts, $st_calls{$hit});
-			push(@second_best_hit_attribute, $attributeHash{$hit});
+	return (\%values_hash);
+}
+
+sub sort_hashes{
+	my $hash_of_hashes = shift;
+	my $typeStrains = shift;
+	my %out_hash;
+	foreach my $sample (keys %$hash_of_hashes){
+		my $outfile = $sample . "/" . $sample . "_sorted_distances.txt";
+		open (my $of, ">", $outfile) or die "Couldn't open file $outfile.\n";
+		my $current_hash = $hash_of_hashes->{$sample};
+		my @hit_names = sort {$current_hash->{$a} <=> $current_hash->{$b} } keys (%$current_hash);
+		my @hit_values = @{$current_hash}{@hit_names};
+		my (@out_hit_names, @out_hit_values);
+		for (my $i=0; $i < scalar @hit_names; $i++){
+			push (@out_hit_names, $hit_names[$i]);
 		}
+		for (my $i=0; $i < scalar @hit_values; $i++){
+			push (@out_hit_values, $hit_values[$i])
+		}
+		print $of join("\t", @out_hit_names) . "\n";
+		print $of join("\t", @out_hit_values) . "\n";
+		close $of;
+		&run_ckmeans($outfile);
+		my $clusterFile = $sample . "/" . $sample . "_cluster_identity.txt";
+		my $type_strain_hash = &generate_strain_approx($clusterFile, $typeStrains);
+		$out_hash{$sample} = $type_strain_hash;
+		}
+		return (\%out_hash);
 	}
-	push (@allele_calls, join("/", @best_hit_names));
-	push (@allele_calls, $best_hit_val);
-	push (@allele_calls, join("/", @best_hits_sts));
-	push (@allele_calls, join("/", @best_hit_attribute));
-	push (@st_array, join("/", @best_hit_attribute));
-	push (@allele_calls, join("/", @second_best_hit_names));
-	push (@allele_calls, $second_best_hit_val);
-	push (@allele_calls, join("/", @second_best_hits_sts));
-	push (@allele_calls, join("/", @second_best_hit_attribute));
-	my $joined_allele_calls = join("\t", @allele_calls);
-	my $joined_st_array = join("\t", @st_array);
-	$out_st_line{$genome} = $joined_allele_calls;
-	$st_all_out{$genome} = $joined_st_array;
+
+sub run_ckmeans{
+	my $input_file = shift;
+	my $cmd = "Rscript $Bin/1d_clustering.R $input_file";
+	system($cmd) == 0 || die "\n";
 }
 
-#Write results
-my $out_approx_file = "ST_approx.out";
-open(my $of, ">", $out_approx_file) or die "Couldn't open file $out_approx_file.\n";
-my $header = join("\t", @header);
-chomp $header;
-print $of $header . "\tBest Hit\tBest Distance\tBest Sequence Type\tBest Proxy/Type Strain\tSecond Best Hit\tSecond Best Distance\tSecond Best Sequence Type\tSecond Best Proxy/Type Strain\n";
-while (my ($key, $value) = each %out_st_line){
-	print $of "$key\t$value\n";
-}
+sub generate_strain_approx{
+		my ($clusterFile, $typeStrains) = @_;
+		my %out_hash;
+		open (my $fh, "<", $clusterFile) or die "Couldn't open file $clusterFile.\n";
+		my $genome = (split "/", $clusterFile)[0];
+		my (@samples, @identities, @cluster_id);
+		my $counter = 0;
+		while (<$fh>){
+			my $line = $_;
+			chomp $line;
+			my @split_line = split("\t", $line);
+			$counter++;
+			if ($counter == 1){
+				@samples = @split_line;
+			} elsif ($counter == 2){
+				@identities = @split_line;
+			} elsif ($counter == 3){
+				@cluster_id = @split_line;
+			}
+		}
+		my @type_strain_indices;
+		my @typeStrainsPresent = @$typeStrains;
+		for (my $i = 0; $i < scalar @samples; $i++){
+				if ($samples[$i] ~~ @typeStrainsPresent){
+					push(@type_strain_indices, $i);
+				}
+		}
+		my $num_of_type_strains = 0;
+		for (my $index_of_interest = 0; $index_of_interest < scalar @type_strain_indices; $index_of_interest++){
+			my $index = $type_strain_indices[$index_of_interest];
+			if ($cluster_id[$index] == 1){
+				$num_of_type_strains++;
+				$out_hash{$num_of_type_strains}{"Sample"} = $samples[$index];
+				$out_hash{$num_of_type_strains}{"Identity"} = $identities[$index];
+			}
+		}
 
-my $out_st_file = "ST_all.out";
-open(my $of1, ">", $out_st_file) or die "Couldn't open file $out_st_file.\n";
-my $header1 = join("\t", @header);
-chomp $header1;
-print $of1 $header1 . "\tBest Hit\n";
-while (my ($key, $value) = each %st_all_out){
-	print $of1 "$key\t$value\n";
-}
+		if (not exists($out_hash{1})){
+			$out_hash{1}{"Sample"} = "";
+			$out_hash{1}{"Identity"} = "";
+		}
+
+		if (not exists($out_hash{2})){
+			$out_hash{2}{"Sample"} = "";
+			$out_hash{2}{"Identity"} = "";
+		}
+
+		return (\%out_hash);
 }
