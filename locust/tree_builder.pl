@@ -213,7 +213,10 @@ my @afa_files = glob ("*.afa");
 foreach my $afa (@afa_files){
     my ($outprefix) = $afa =~ /^(\w+)\.afa/;
     my $trimaln = $outprefix."_trimmed_alignment.fasta";
-    my $cmd = $TRIM_CMD . " -in $afa -out $trimaln -gt 1 -fasta";
+    
+
+    #Now set at .1 (1 - .1 = Remove positions with gaps in 90% or more of the sequences
+    my $cmd = $TRIM_CMD . " -in $afa -out $trimaln -gt .1 -fasta";
     system($cmd) == 0 || die("ERROR: $cmd failed");
 }
 
