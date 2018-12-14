@@ -26,8 +26,6 @@ B<--st_results, s>   : ST_all.out file from typer.pl run.
 
 B<--type_alleles, t> : Number of alleles in schema.
 
-B<--attributes, a> : Number of attributes in the input.
-
 B<--help, h>         : Display this help message.
 
 =head1  DESCRIPTION
@@ -47,7 +45,6 @@ GetOptions(\%opts,
 	'typer_input_file|i=s',
 	'st_results|s=s',
 	'type_alleles|t=i',
-	'attributes|a=i',
 ) || die "Error getting options! $!";
 
 pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
@@ -68,9 +65,9 @@ while (<$st>){
 } else {
 		my @line_values = split("\t", $line);
 		chomp @line_values;
-        if ("NEW" ~~ @line_values){
+        #if ("NEW" ~~ @line_values){
             $new_genomes{$line_values[0]} = "APPROXIMATE";
-        }
+        #}
 		$st_designations{$line_values[0]} = join("\t", @line_values[1 .. $opts{type_alleles} + 1]);
 		$st_calls{$line_values[0]} = $line_values[1];
 	}
@@ -116,7 +113,7 @@ my @add_to_st_approx_header = ("Best Hit ID", "Best Hit Attribute", "Best Hit ST
 push @st_approx_header, @add_to_st_approx_header;
 
 
-open(my $st_all, '>', "ST_all_test.out") or die "Couldn't open ST_all.out\n";
+open(my $st_all, '>', "ST_all_approx.out") or die "Couldn't open ST_all.out\n";
 open(my $st_approx, '>', "ST_approx.details") or die "Couldn't open ST_approx.details\n";
 
 print $st_all join("\t", @st_out_header) . "\n";
@@ -271,11 +268,11 @@ sub generate_strain_approx{
 		my $num_of_type_strains = 0;
 		for (my $index_of_interest = 0; $index_of_interest < scalar @type_strain_indices; $index_of_interest++){
 			my $index = $type_strain_indices[$index_of_interest];
-			if ($cluster_id[$index] == 1){
+			#if ($cluster_id[$index] == 1){
 				$num_of_type_strains++;
 				$out_hash{$num_of_type_strains}{"Sample"} = $samples[$index];
 				$out_hash{$num_of_type_strains}{"Identity"} = $identities[$index];
-			}
+			#}
 		}
 
 		if (not exists($out_hash{1})){

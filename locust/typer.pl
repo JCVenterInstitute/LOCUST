@@ -111,7 +111,7 @@ B<--input_path>      : Point to directory of fasta files
 
 B<--multi_copy>      : Flag to pull multi copy genes
 
-B<--skip_itol>			 : Skips making the itol annotation file
+B<--skip_itol>	     : Skips making the itol annotation file
 
 B<--itol_text>			: Makes an ITOL text annotation file instead of a colored strip annotation file.
 
@@ -183,7 +183,7 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'schema_alleles=i',
 	    'config|c=s',
 	    'tree|t=s',
-			'exclude_genomes',
+	    'exclude_genomes',
 	    'org_search=s',
 	    'genome_type=s',
 	    'biosample_list=s',
@@ -320,6 +320,10 @@ unless($opts{novel_schema}){
     close $nth;
 }
 
+#Cat all multi_copy logs
+#my $mcfh = path("$OUTPUT/multi_copy_hits.txt")->filehandle(">");
+#&_cat($mcfh,$multi_copy_logs);
+
 #Run st finder on new alleles and add results to original
 #output file
 if($opts{append_schema}){
@@ -403,6 +407,16 @@ if($opts{tree}){
 
 print $lfh "|Finished typer.pl "  .  localtime() . "\n";
 #############################################
+sub make_exclude_file{
+
+    my $list = shift;
+    my $file_name = "$OUTPUT/exclude_genome.list";
+    my $fh = path($file_name)->filehandle(">");
+
+    map{print $fh "$_\n"} @$list;
+    return($file_name);
+}
+
 sub create_input_file{
 
     my $dir = shift;
@@ -769,7 +783,7 @@ sub parse_config{
 sub create_tree{
     print $lfh "|Step: Creating $opts{tree} tree\n";
 
-    my ($tree_type,$input_file) = @_;
+    my ($tree_type,$input_file,$exclude_file) = @_;
 
     my $cmd = "perl $Bin/tree_builder.pl";
     $cmd .= " -i $input_file";
@@ -777,6 +791,7 @@ sub create_tree{
     $cmd .= " -o $OUTPUT";
     $cmd .= " -c $opts{config}";
     $cmd .= " -t $opts{tree}";
+    $cmd .= " -e $exclude_file" if $opts{exclude_genomes};
 
     print $lfh "Running: $cmd\n";
     system($cmd);
@@ -790,7 +805,6 @@ sub strain_approximation{
 	$cmd .= " -i $opts{input_file}";
 	$cmd .= " -s ST_all.out";
 	$cmd .= " -t $ST_type_size";
-	$cmd .= " -a $ST_attr_size";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
 }
 
@@ -1101,9 +1115,11 @@ sub create_novel_files{
     my $genome_st; #stores what alleles are associated with what genome
     my $allele_number; #stores allele numbers to increment
     my @genome_names; #stores genome names
+    my $ambig_alleles;
 
     #loop through each genomes top hit sequence file
     foreach my $file (@$fasta_files){
+
 	#find the genome name to use in novel ST file
 	my ($name,$path,$suffix) = fileparse($file);
 	my $genome = $1 if ($name =~ /(.*)\_hits\_top\_seqs\.fa/);
@@ -1111,11 +1127,14 @@ sub create_novel_files{
 
 	#open genome fasta file
 	my $fh = path($file)->filehandle("<");
-	my ($c_allele,$p_allele,$current_sequence);
+	my ($c_allele,$p_allele,$current_sequence) = ("","","");
 
 	#loop through fasta file and store allele information
 	#and sequence if it is unique. Determine correct allele
 	#designation to assign
+
+	my $unique_id = 0;
+
 	while(<$fh>){
 
 	    my $line = $_;
@@ -1129,6 +1148,10 @@ sub create_novel_files{
 
 		$c_allele = $alleles[0];
 		$c_allele =~ s/\s+$//;
+
+		$unique_id++ if($current_sequence);
+
+		$c_allele = $c_allele . ":" . $unique_id;
 		$p_allele = $c_allele unless($p_allele);
 
 		if($current_sequence){
@@ -1136,34 +1159,50 @@ sub create_novel_files{
 		    #Remove all whitespace to make one string
 		    $current_sequence =~ s/\s+//g;
 
+		    my @values = split(":",$p_allele);
+
 		    if ($current_sequence  =~ /^SHORT/) {
 
 			#Store allele SHORT for this genome
-			$genome_st->{$genome}->{$p_allele} = "SHORT";
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "SHORT";
 
-		} elsif ($current_sequence =~ /^3'PRTL/){
-			$genome_st->{$genome}->{$p_allele} = "3'PRTL";
-		} elsif ($current_sequence =~ /^5'PRTL/){
-			$genome_st->{$genome}->{$p_allele} = "5'PRTL";
-		} elsif ($current_sequence =~ /^PSEUDO/){
-			$genome_st->{$genome}->{$p_allele} = "PSEUDO";
+		    } elsif ($current_sequence =~ /^3'PRTL/){
 
-		}	else{
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "3'PRTL";
 
-			unless(exists $unique_sequences->{$current_sequence}->{$p_allele}){
+		    } elsif ($current_sequence =~ /^5'PRTL/){
 
-			    if(exists $allele_number->{$p_allele}){
-				$allele_number->{$p_allele}++;
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "5'PRTL";
+
+		    } elsif ($current_sequence =~ /^PSEUDO/){
+			$genome_st->{$genome}->{$values[0]}->{$p_allele} = "PSEUDO";
+
+		    } else {
+
+			my $novel_id;
+
+			if(exists $unique_sequences->{$current_sequence}->{$values[0]}){
+
+			    my($id,$orig_allele) = split("_",$unique_sequences->{$current_sequence}->{$values[0]});
+			    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $id;
+			    $ambig_alleles->{$genome}->{$orig_allele} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
+
+			}else{
+
+			    #Increment number based on original allele name, not unique value of allele and unique id
+			    if(exists $allele_number->{$values[0]}){
+				$allele_number->{$values[0]}++;
 			    }else{
-				$allele_number->{$p_allele} = 1;
+				$allele_number->{$values[0]} = 1;
 			    }
 
 			    #Store new seq and assign next incremented allele number
-			    $unique_sequences->{$current_sequence}->{$p_allele} = "NOVEL" . $allele_number->{$p_allele};
-			}
+			    $novel_id = "NOVEL" . $allele_number->{$values[0]};
+			    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$p_allele";
 
-			#Store allele number for this genome
-			$genome_st->{$genome}->{$p_allele} = $unique_sequences->{$current_sequence}->{$p_allele};
+			    $ambig_alleles->{$genome}->{$values[0]. ":" .$unique_id} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
+			    $genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
+			}
 
 		    }
 
@@ -1178,40 +1217,109 @@ sub create_novel_files{
 		$current_sequence .= $line;
 
 	    }
+
 	}
 
 	#Account for final sequence
 	if($current_sequence){
 
+	    $unique_id++;
+
 	    #Remove all whitespace to make one string
 	    $current_sequence =~ s/\s+//g;
+
+	    #split just in case multi copy
+	    my @values = split(":",$p_allele);
 
 	    if ($current_sequence  =~ /^SHORT/) {
 
 		#Store allele SHORT for this genome
-		$genome_st->{$genome}->{$p_allele} = "SHORT";
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "SHORT";
+
+	    }elsif ($current_sequence =~ /^3'PRTL/){
+
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "3'PRTL";
+
+	    } elsif ($current_sequence =~ /^5'PRTL/){
+
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "5'PRTL";
+
+	    } elsif ($current_sequence =~ /^PSEUDO/){
+
+		$genome_st->{$genome}->{$values[0]}->{$p_allele} = "PSEUDO";
 
 	    }else{
-		unless(exists $unique_sequences->{$current_sequence}->{$p_allele}){
 
-		    if(exists $allele_number->{$p_allele}){
-			$allele_number->{$p_allele}++;
+		my $novel_id;
+
+
+		if(exists $unique_sequences->{$current_sequence}->{$values[0]}){
+
+		    my($id,$orig_allele) = split("_",$unique_sequences->{$current_sequence}->{$values[0]});
+		    $genome_st->{$genome}->{$values[0]}->{$orig_allele} = $id;
+		    $ambig_alleles->{$genome}->{$orig_allele} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
+
+		}else{
+
+		    #Split p_allele name on : which is used to help multi copy designation
+		    my @values = split(":",$p_allele);
+
+		    #Increment number based on original allele name, not unique value of allele and unique id
+		    if(exists $allele_number->{$values[0]}){
+			$allele_number->{$values[0]}++;
 		    }else{
-			$allele_number->{$p_allele} = 1;
+			$allele_number->{$values[0]} = 1;
 		    }
 
 		    #Store new seq and assign next incremented allele number
-		    $unique_sequences->{$current_sequence}->{$p_allele} = "NOVEL" . $allele_number->{$p_allele};
-		    #print "$p_allele:$allele_number->{$p_allele}\n";
+		    $novel_id = "NOVEL" . $allele_number->{$values[0]};
+		    $unique_sequences->{$current_sequence}->{$values[0]} = $novel_id . "_$p_allele";
 
+		    $ambig_alleles->{$genome}->{$values[0]. ":" .$unique_id} = 1 if($current_sequence =~ /[^ATGCacgt+]/);
+		    $genome_st->{$genome}->{$values[0]}->{$values[0]. ":" .$unique_id} = $novel_id;
 		}
 
-		#Store allele number for this genome
-		$genome_st->{$genome}->{$p_allele} = $unique_sequences->{$current_sequence}->{$p_allele};
+	    }
+	}
+    }
+
+    #Add post labels for MC and AMBIG alleles
+    foreach my $genome(keys %$genome_st){
+
+	foreach my $allele(keys %{$genome_st->{$genome}}){
+
+	    my $count_alleles = scalar(keys %{$genome_st->{$genome}->{$allele}});
+	    my $labels;
+
+	    foreach my $unique(keys %{$genome_st->{$genome}->{$allele}}){
+
+		my $label = $genome_st->{$genome}->{$allele}->{$unique};
+
+		#add AMBIG label if needed
+		if(exists $ambig_alleles->{$genome}->{$unique}){
+		    $genome_st->{$genome}->{$allele}->{$unique} = "AMBIG";
+		}
+
+		if($count_alleles > 1 && $opts{multi_copy}) { #means multi_copy
+
+		    if(exists $labels->{$label}){
+
+			$genome_st->{$genome}->{$allele}->{$unique} = $label . "_MC";
+
+			my $orig_label = $labels->{$label};
+			$genome_st->{$genome}->{$allele}->{$orig_label} = $label . "_MC";
+
+		    }else{
+
+			$labels->{$label} = $unique;
+		    }
+
+		}
 
 	    }
 
 	}
+
     }
 
     #Sort allele and genome names to ensure proper ordering
@@ -1221,6 +1329,7 @@ sub create_novel_files{
     #Create novel outdir
     my $novel_outdir = "$OUTPUT/novel_schema";
     mkdir($novel_outdir) unless (-d $novel_outdir);
+
 
     #Call novel print subs
     print_novel_schema($genome_st,\@genome_names,\@alleles,$novel_outdir);
@@ -1236,10 +1345,17 @@ sub print_novel_fasta{
     foreach my $seq (keys %$sequences){
 
 	foreach my $allele (keys %{$sequences->{$seq}}){
-	    if ($seq !~ /^SHORT/) {
-		my $header = "$allele" . "_" . "$sequences->{$seq}->{$allele}";
-		print $fh ">$header\n";
-		print $fh "$seq\n";
+
+	    if ($seq !~ /^(SHORT|PSEUDO|PRTL)/) {
+		my @values = split(":",$allele);
+		my ($novel_id,$orig_allele) = split("_",$sequences->{$seq}->{$allele});
+
+		#Do not print ambigious sequences
+		unless($seq =~ /[^ATGCacgt+]/){
+		    my $header = "$values[0]" . "_" . "$novel_id";
+		    print $fh ">$header\n";
+		    print $fh "$seq\n";
+		}
 	    }
 	}
     }
@@ -1260,39 +1376,97 @@ sub print_novel_schema{
     my $ST;
     my $ST_number = 0;
     my $genome_alleles;
-    #Note: Both genome_names and alleles come in pre-sorted
-    foreach my $genome (keys %$genome_st){
-	my $hsh = $genome_st->{$genome};
+    my $genome_print;
 
-   	#make sure all seed alleles are present in genome
-	#if not add MISSING
-	my @allele_numbers;
-	my $unknown = 0;
+    #Determine which alleles have multiple variants
+    foreach my $genome(@$genome_names){
+
+	my %locations;
+	my $location_count = 0;
+	my @multi_variants;
+	my @base_string;
 
 	foreach my $allele (sort @$SEED_ALLELES){
-	    if(defined $hsh->{$allele}){
-		push(@allele_numbers,$hsh->{$allele});
-		if($hsh->{$allele} eq "SHORT"){
-		    $unknown = 1;
-		}
+
+	    $locations{$allele} = $location_count;
+	    $location_count++;
+
+	    my @v;
+
+	    if(exists $genome_st->{$genome}->{$allele}){
+		@v = keys $genome_st->{$genome}->{$allele};
 	    }else{
-		push(@allele_numbers, "MISSING");
-		$unknown = 1;
+		$genome_st->{$genome}->{$allele}->{'1'} = "MISSING";
+	    }
+
+	    my $count = scalar(@v);
+
+	    if($count > 1){ #Means multi copy for this allele
+
+		push(@multi_variants,\@v);
+		push(@base_string,"");
+
+	    }else{
+
+		if(@v){
+      		    my $schema_num = $genome_st->{$genome}->{$allele}->{$v[0]};
+		    push(@base_string,$schema_num);
+
+		}else{
+		    push(@base_string,"MISSING");
+		}
 	    }
 	}
 
-	my $allele_number_st = join("\t",@allele_numbers);
-	$genome_alleles->{$genome} = $allele_number_st;
+	my @variants;
+	push @variants, clone(\@base_string);
 
-	#Store ST combinations
-	unless(defined $ST->{$allele_number_st}){
-	    if ($unknown) {
-		$ST->{$allele_number_st} = "UNKNOWN";
-	    } else {
+	foreach my $gene(@multi_variants){
+
+	    my($base_allele,$unique_num) = split(/:/,$gene->[0]);
+
+	    my $values_to_add = scalar(@variants);
+	    my $size = scalar(@$gene);
+	    grow_variants( \@variants, $size );
+
+	    my $allele_index = $locations{$base_allele};
+
+	    my $values_added = 0;
+	    my $index = 0;  #increment this until it's time to move on.
+
+	    for my $allele ( @$gene ) {
+
+		my $allele_schema = $genome_st->{$genome}->{$base_allele}->{$allele};
+
+		while ( $values_added < $values_to_add ) {
+		    # Fill the location for allele at this entry
+		    $variants[$index][$allele_index] = $allele_schema;
+
+		    # then increment both index and values_added
+		    $index++;
+		    $values_added++;
+		}
+
+		$values_added = 0; # reset values added between alleles.
+	    }
+	}
+
+	#Clean up @variants to remove duplicate type string
+	my $unique_variants;
+
+	foreach (@variants){
+	    my $variant_value = $_;
+	    my $variant_string = join("\t",@$variant_value);
+
+	    $unique_variants->{$variant_string} = 1;
+
+	    unless($variant_string =~ /(MISSING|SHORT|PSEUDO|PRTL)/){
 		$ST_number++;
-		$ST->{$allele_number_st} = $ST_number;
+		$ST->{$variant_string} = $ST_number;
 	    }
 	}
+
+	$genome_print->{$genome} = $unique_variants;
     }
 
     #Parse genome st hash to come up with numbers assoicated
@@ -1305,18 +1479,20 @@ sub print_novel_schema{
     print $s_fh "ST\t" . join("\t", sort @$SEED_ALLELES). "\n";
 
     #Print ST
-    foreach my $genome (@$genome_names){
+    foreach my $genome(keys %$genome_print){
 
-	print $st_fh $genome . "\t";
-	print $st_fh $ST->{$genome_alleles->{$genome}} . "\t";
-	print $st_fh $genome_alleles->{$genome};
-	print $st_fh "\n";
-    }
+	foreach my $v (keys $genome_print->{$genome}){
+	    print $st_fh $genome . "\t";
 
-    #Clean out unknown STs
-    foreach my $ST_key (keys %$ST){
-	if ($ST->{$ST_key} eq "UNKNOWN") {
-	    delete $ST->{$ST_key};
+	    if($v =~ /(MISSING|SHORT|PSEUDO|PRTL)/){
+		print $st_fh "UNKNOWN\t";
+	    }else{
+		print $st_fh $ST->{$v} . "\t";
+	    }
+
+	    print $st_fh $v;
+	    print $st_fh "\n";
+
 	}
     }
 
@@ -1334,10 +1510,6 @@ sub make_new_schema{
 
     my $new_file =  "$outdir/appended_scheme.txt";
     my $final_st_file = "$outdir/append_allele_ST.out";
-
-    #my $new_fh = path($new_file)->filehandle(">");
-    #my $final_st_fh = path($final_st_file)->filehandle(">");
-    #my $orig_fh = path($orig_st)->filehandle("<");
 
     open(my $new_fh, ">", $new_file) || die "ERROR: Cannot open $new_file.\n";
     open(my $final_st_fh, ">", $final_st_file) || die "ERROR: Cannot open $final_st_file.\n";
@@ -1430,9 +1602,12 @@ sub make_new_schema{
 		my $skip_bad = 0;
 
 		foreach my $value (@values) {
-			if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO")) {
-					$skip_bad = 1;
+		    if (($value eq "MISSING") || ($value eq "SHORT") || ($value eq "3'PRTL") || ($value eq "5'PRTL") || ($value eq "PSEUDO") || ($value =~ /AMBIG/)) {
+
+			$skip_bad = 1;
+
 		    } elsif ($value eq "NEW") {
+
 			$skip_bad = 1;
 
 			print $lfh "|WARNING: no NEW alleles should be found for append_schema option but $sample had type $st_num for ($st_type).\n";
@@ -1526,11 +1701,12 @@ sub run_seq_type{
 
     #Open input file and loop through genomes
     my @lines = read_file($input_file);
-    my (@st_files,@fa_files,@top_seqs_files);
+    my (@st_files,@fa_files,@top_seqs_files,@multi_copy);
     my $genomeHeader = "";
     my $header = 1;
 
     my $tfh = path("$OUTPUT/logs/tophits.log")->filehandle(">");;
+    my @exclude_genomes;
 
     foreach my $line (@lines){
 
@@ -1609,10 +1785,11 @@ sub run_seq_type{
 	}
 
 	#Run MLST Scripts
-	my $top_hits_file = run_top_hits($blast_file,$genome,$new_alleles,$tfh); #for $new_alleles this is just used to return the file name
+	my ($top_hits_file,$th_log)= run_top_hits($blast_file,$genome,$new_alleles,$tfh); #for $new_alleles this is just used to return the file name
 	my $top_seqs_file = run_pullseqs($top_hits_file,$genome,$new_alleles); #for $new_alleles this is just used to return the file name
 
 	push(@top_seqs_files, $top_seqs_file);
+	push(@multi_copy, $th_log) if(-s $th_log);
 
 	my ($st_out,$fa_out);
 
@@ -1621,15 +1798,17 @@ sub run_seq_type{
 	    push(@fa_files,$top_seqs_file);
 
 	}else{
+	    my $exclude_genome;
 
-	    ($st_out,$fa_out) = run_st_finder($top_seqs_file, $genome, $new_alleles, \%stMap, \%alleleMap, \@allelesOrdered, \%stAttributes, $genomeAttributes, $genomeHeader) ;
+	    ($st_out,$fa_out,$exclude_genome) = run_st_finder($top_seqs_file, $genome, $new_alleles, \%stMap, \%alleleMap, \@allelesOrdered, \%stAttributes, $genomeAttributes, $genomeHeader) ;
 	    push(@fa_files,$fa_out);
 	    push(@st_files,$st_out);
-
+	    push(@exclude_genomes,$exclude_genome) if $exclude_genome;
 	}
 
     }
 
+    my $exclude_file = make_exclude_file(\@exclude_genomes);
 
     #Add previous genome's list output files
     unless($opts{retype}){
@@ -1915,6 +2094,8 @@ sub run_st_finder{
     my %query_sequences;               # hash ref of query sequences
 
     my $outputfile;
+    my $ambig_alleles;
+    my $ambig_flag;
 
     #Open File for NEW Allele sequences
     my($new_alleles_file,$new_alleles_fh);
@@ -1943,6 +2124,7 @@ sub run_st_finder{
 
     # Open Bio::SeqIO object for top_seqs_file.
     my $inQueries = Bio::SeqIO->new(-file => "<$top_seqs_file", -format => "fasta",);
+    my $query_count = 1;
 
     # Parse through the query.
     while (my $query = $inQueries->next_seq) {
@@ -1951,19 +2133,20 @@ sub run_st_finder{
 
 	#Split name to get queryAllele
 	my($queryAllele,$scheme) = split(/\_/,$queryName,2);
+	my $unique_id = $queryAllele . ":" . $query_count;
 
-	$allelesFound{$queryAllele}{$queryName} = "NEW";
-	$query_sequences{$queryName} = $querySeq;
+	$allelesFound{$queryAllele}{$unique_id} = "NEW";
+	$query_sequences{$queryAllele}{$unique_id} = $querySeq;
 
        	# If the query's sequence begins with "SHORT", declare the queryAllele's hit as SHORT.
 	if ($querySeq =~ /^SHORT/) {
-	    $allelesFound{$queryAllele}{$queryName} = "SHORT";
-		} elsif ($querySeq =~ /^PSEUDO/) {
-			    $allelesFound{$queryAllele}{$queryName} = "PSEUDO";
-		} elsif ($querySeq =~ /^5'PRTL/) {
-			    $allelesFound{$queryAllele}{$queryName} = "5'PRTL";
-		} elsif ($querySeq =~ /^3'PRTL/) {
-			    $allelesFound{$queryAllele}{$queryName} = "3'PRTL";
+	    $allelesFound{$queryAllele}{$unique_id} = "SHORT";
+	} elsif ($querySeq =~ /^PSEUDO/) {
+	    $allelesFound{$queryAllele}{$unique_id} = "PSEUDO";
+	} elsif ($querySeq =~ /^5'PRTL/) {
+	    $allelesFound{$queryAllele}{$unique_id} = "5'PRTL";
+	} elsif ($querySeq =~ /^3'PRTL/) {
+	    $allelesFound{$queryAllele}{$unique_id} = "3'PRTL";
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
 
 	    #Note: Different alleles COULD have the same sequence
@@ -1973,11 +2156,50 @@ sub run_st_finder{
 		#(i.e. the query allele name forms the beginning of the MLST allele name),
 		#it is a proper match.
 		if ($mlstAlleleName eq $queryAllele) {
-		    $allelesFound{$queryAllele}{$queryName} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
+		    $allelesFound{$queryAllele}{$unique_id} = $alleleMap->{lc($querySeq)}->{$mlstAlleleName};
 		}
+	    }
+	}elsif($querySeq =~ /[^ATGCacgt+]/){
+	    $ambig_alleles->{$unique_id} = 1;
+	    $ambig_flag = 1;
+	}
+
+	$query_count++;
+    }
+
+    # Modify allelesFound to add _MC where the is a multi copy
+    foreach my $allele(keys %allelesFound){
+
+	my $count_alleles = scalar(keys %{$allelesFound{$allele}});
+	my $labels;
+
+	foreach my $unique(keys %{$allelesFound{$allele}}){
+
+	    my $label = $allelesFound{$allele}{$unique};
+
+	    #Adds Ambig Flag
+	    if(exists $ambig_alleles->{$unique}){
+		$allelesFound{$allele}{$unique} = "AMBIG";
+	    }
+
+	    if($count_alleles > 1){ #Add MC flag
+
+		if(exists $labels->{$label}){
+
+		    $allelesFound{$allele}{$unique} = $label . "_MC";
+
+		    my $orig_label = $labels->{$label};
+		    $allelesFound{$allele}{$orig_label} = $label . "_MC";
+
+		}else{
+
+			$labels->{$label} = $unique;
+		}
+
 	    }
 	}
     }
+
 
     #Determine which alleles have multiple variants
     my @multi_variants;
@@ -2005,8 +2227,10 @@ sub run_st_finder{
 	my $count = scalar (@v);
 
 	if($count > 1){
+
 	    push(@multi_variants,\@v);
 	    push(@base_string,"");
+
 	}else{
 
 	    if(@v){
@@ -2023,7 +2247,8 @@ sub run_st_finder{
 
     foreach my $gene(@multi_variants){
 
-	my($base_allele,$gene_schema) = split(/_/,$gene->[0]);
+	my($base_allele,$unique_num) = split(/:/,$gene->[0]);
+
 	my $values_to_add = scalar(@variants);
 
 	my $size = scalar(@$gene);
@@ -2035,7 +2260,7 @@ sub run_st_finder{
 	my $index = 0;  #increment this until it's time to move on.
 
 	for my $allele ( @$gene ) {
-			my($a,$s) = split(/_/,$allele);
+
 	    my $allele_schema = $allelesFound{$base_allele}{$allele};
 
 	    while ( $values_added < $values_to_add ) {
@@ -2062,13 +2287,22 @@ sub run_st_finder{
 
 	#Print new allele sequences to fasta file
 	if(exists $allelesFound{$allele}){
+
 	    foreach my $a(keys $allelesFound{$allele}){
-		if($allelesFound{$allele}{$a} eq 'NEW'){
-		    print $new_alleles_fh ">$allele\n"  unless $new_alleles;
-		    print $new_alleles_fh "$query_sequences{$a}\n" unless $new_alleles;
+
+		if($allelesFound{$allele}{$a} =~ /NEW/){
+
+		    #Do not want to count sequences that are ambigious as NEW
+		    unless(exists $ambig_alleles->{$a}){
+			print $new_alleles_fh ">$allele\n" unless $new_alleles;
+			print $new_alleles_fh "$query_sequences{$allele}{$a}\n" unless $new_alleles;
+		    }
 		}
+
 	    }
+
 	}
+
     }
 
     # Clean up @variants to remove duplicate type string
@@ -2081,15 +2315,21 @@ sub run_st_finder{
 
     }
 
+    my $exclude_genome; #Stores genomes with missing or short alleles to exclude in tree builder
+
    # If the stKey exists in stMap, print both ST found and stKey to output file.
     foreach my $stKey (keys %$unique_variants){
 
-	#my $stKey = join("\t",@$combo);
 	my $ST;
 
-	if (exists $stMap->{$stKey}) {
+	#Replace Flags for multi copy so string would match original
+	#schema file
+	my $tempKey = $stKey;
+	$tempKey =~ s/\_MC//;
 
-	    $ST = $stMap->{$stKey};
+	if (exists $stMap->{$tempKey} && !($ambig_flag)) {
+
+	    $ST = $stMap->{$tempKey};
 	}
 
 	# Otherwise, print "UNKNOWN" and stKey to output file.
@@ -2100,6 +2340,8 @@ sub run_st_finder{
 
 
 	print $output_fh "$identifier\t$ST\t$stKey";
+
+	$exclude_genome = $identifier if($stKey =~ /(MISSING|SHORT)/);
 
 	if (keys %{ $stAttributes }) {
 	    print $output_fh "\t$stAttributes->{$ST}";
@@ -2112,7 +2354,7 @@ sub run_st_finder{
 	print $output_fh "\n";
     }
 
-    return($outputfile,$new_alleles_file);
+    return($outputfile,$new_alleles_file,$exclude_genome);
 }
 sub grow_variants {
 
@@ -2159,10 +2401,12 @@ sub run_top_hits{
     my ($blast,$genome,$new_alleles,$log_file) = @_;
 
     my $file = "$OUTPUT/$genome/$genome" . "_hits_top.txt";
+    my $multi_file = "$OUTPUT/$genome/$genome" . "_multi_copy_hits.txt";
 
     my $cmd = "perl $Bin/tophits.pl";
     $cmd .= " $blast";
-    $cmd .= " multi_copy" if $opts{multi_copy};
+    $cmd .= " $multi_file";
+    $cmd .= " multi" if $opts{multi_copy};
 
     #skips running the top hits if file already
     #exists and the option --skip_blast is set
@@ -2177,7 +2421,7 @@ sub run_top_hits{
 	} stdout => $log_file;
     }
 
-    return ($file);
+    return ($file,$multi_file);
 
 }
 sub run_blastall{
@@ -2343,20 +2587,22 @@ sub check_params{
     }elsif($opts{incrememnt}){
 	$error .= "ERROR: Option --seed_file is required when using the --incrememnt option\n";
     }
-		if ($opts{download_schema}) {
-			if ($opts{scheme}) {
-				$error .= "ERROR: Cannot use the download schema option when providing schema\n";
-				die("ERROR: Cannot use the download schema option when providing schema.\n");
-			}
-			if ($opts{alleles}) {
-				$error .= "ERROR: Cannot use the download schema option when providing alleles file\n";
-				die("ERROR: Cannot use the download schema option when providing alleles file.\n");
-			}
-			if ($opts{seed_file}) {
-				$error .= "ERROR: Cannot use the download schema option when providing a seed file\n";
-				die("ERROR: Cannot use the download schema option when providing a seed file.\n");
-			}
-		}
+
+    if ($opts{download_schema}) {
+	if ($opts{scheme}) {
+	    $error .= "ERROR: Cannot use the download schema option when providing schema\n";
+	    die("ERROR: Cannot use the download schema option when providing schema.\n");
+	}
+	if ($opts{alleles}) {
+	    $error .= "ERROR: Cannot use the download schema option when providing alleles file\n";
+	    die("ERROR: Cannot use the download schema option when providing alleles file.\n");
+	}
+	if ($opts{seed_file}) {
+	    $error .= "ERROR: Cannot use the download schema option when providing a seed file\n";
+	    die("ERROR: Cannot use the download schema option when providing a seed file.\n");
+	}
+    }
+
     unless($opts{download_schema}){
 	if($opts{scheme}){
 	    if ($opts{scheme} !~ /^\//) {
@@ -2428,6 +2674,10 @@ sub check_params{
 
     if($opts{hmm_model}){
 	$error .= "ERROR:$opts{hmm_model} does not exist or is size zero\n" unless(-s $opts{hmm_model});
+    }
+
+    if($opts{novel_schema} && $opts{schema}){
+	$error .= "ERROR: Can not use both --schema option and --novel_schema\n";
     }
 
     if($error){
