@@ -400,7 +400,7 @@ if($opts{tree}){
     my $tree_input_file;
     $opts{original_input_file} ? $tree_input_file = $increment_combined_list : $tree_input_file = $input_file;
     &create_tree($opts{tree},$tree_input_file);
-		&strain_approximation($ST_type_size, $ST_attr_size)
+		&strain_approximation($ST_type_size);
 }
 
 &cleanup_files;
@@ -798,7 +798,7 @@ sub create_tree{
 }
 
 sub strain_approximation{
-	my ($ST_type_size, $ST_attr_size) = @_;
+	my $ST_type_size = shift;
 	print $lfh "|Step: Generating st approximations.\n";
 
 	my $cmd = "perl $Bin/strain_approximation.pl";
@@ -2341,7 +2341,7 @@ sub run_st_finder{
 
 	print $output_fh "$identifier\t$ST\t$stKey";
 
-	$exclude_genome = $identifier if($stKey =~ /(MISSING|SHORT)/);
+	$exclude_genome = $identifier if($stKey =~ /(MISSING|SHORT|5'PRTL|3'PRTL|PSEUDO)/);
 
 	if (keys %{ $stAttributes }) {
 	    print $output_fh "\t$stAttributes->{$ST}";
