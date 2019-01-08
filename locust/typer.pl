@@ -577,7 +577,8 @@ sub download_from_ncbi{
     my $base_cmd = "$exe --both --separate_downloads -o $OUTPUT";
     $base_cmd .= " --min_N50 $opts{min_n50}" if $opts{min_n50};
     $base_cmd .= " --max_contigs $opts{max_contigs}" if $opts{max_contigs};
-
+    $base_cmd .= " --id_type biosample";
+    
     if($opts{genome_type}){
 	if($opts{genome_type} eq 'cg'){
 	    $base_cmd .= " --cg";
@@ -670,6 +671,7 @@ sub download_from_ncbi{
     }else{
 	die( "ERROR: Problem download. No combined.list file created");
     }
+
 }
 
 sub clean_current_output_dir{
