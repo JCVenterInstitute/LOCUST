@@ -51,6 +51,7 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --multi_copy
                          --skip_itol
                          --itol_text
+                         --skip_translation
                          --help
 
 =head1 OPTIONS
@@ -114,6 +115,8 @@ B<--multi_copy>      : Flag to pull multi copy genes
 B<--skip_itol>	     : Skips making the itol annotation file
 
 B<--itol_text>			: Makes an ITOL text annotation file instead of a colored strip annotation file.
+
+B<--skip_translation>   : Skip the translation check (Won't find PSEUDO genes)
 
 B<--help, h>         : Display this help message.
 
@@ -199,7 +202,8 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'input_path=s',
 	    'multi_copy',
 	    'skip_itol',
-			"itol_text",
+		"itol_text",
+        "skip_translation",
 	    'help|h') || die "Error getting options! $!";
 
 
@@ -2381,7 +2385,6 @@ sub grow_variants {
 
 sub run_pullseqs{
     my ($top_hits,$genome,$new_alleles) = @_;
-
     my $file = "$OUTPUT/$genome/$genome" . "_hits_top_seqs.fa";
 
     my $cmd = "perl $Bin/pullseqs.pl";
@@ -2389,6 +2392,7 @@ sub run_pullseqs{
     $cmd .= " -blastfile $top_hits";
     $cmd .= " -seeds $opts{seed_file}";
     $cmd .= " -max_mismatch $opts{blast_length}" if $opts{blast_length};
+    $cmd .= " -skip_translation 1" if $opts{skip_translation};
 
     unless(-s $file && $opts{skip_blast} || $new_alleles){
 	print $lfh "Running: $cmd\n";
