@@ -4,6 +4,7 @@ use Pod::Usage;
 use Data::Dumper;
 use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use List::Util;
+use Bio::TreeIO;
 use FindBin qw($Bin);
 use lib "$Bin";
 #Collect Inputs
@@ -52,6 +53,11 @@ pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 my $stfile = $opts{st_results};
 my $typer_input_file = $opts{typer_input_file};
 
+my $treeio = Bio::TreeIO->new(-file => "allGenomesJoinedAlleles_fasttree.tree",
+                            -format => "newick");
+my $tree = $treeio->next_tree;
+$tree->move_id_to_bootstrap;
+
 my (@header, %st_designations, %st_calls, %new_genomes);
 open(my $st, '<', $stfile) or die "Couldn't open $stfile\n";
 my $header_seen = 0;
@@ -72,6 +78,7 @@ while (<$st>){
 		$st_calls{$line_values[0]} = $line_values[1];
 	}
 }
+
 
 my $type_strains = 0;
 
@@ -136,25 +143,63 @@ foreach my $key (keys %st_designations){
 			push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Identity"});
 	} else {
         if (exists $new_genomes{$key}){
-    		push (@st_out_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
-    		push (@st_out_list, $attributeHash{$type_strain_hashes->{$key}->{2}->{"Sample"}});
+                my $best_hit = $type_strain_hashes->{$key}->{1}->{"Sample"};
+                if (&check_neighbors($tree, $key, $best_hit, \%st_calls)) {
+        		push (@st_out_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+                #if &check_neighbors($tree, "SAMD00076684", "SAMN07528788", \%st_calls)
+                push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Sample"});
+                push (@st_approx_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+                push (@st_approx_list, $st_calls{$type_strain_hashes->{$key}->{1}->{"Sample"}});
+                push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Identity"});
+            }
+                my $best_hit_2 = $type_strain_hashes->{$key}->{2}->{"Sample"};
+                if (&check_neighbors($tree, $key, $best_hit_2, \%st_calls)){
+                push (@st_out_list, $attributeHash{$type_strain_hashes->{$key}->{2}->{"Sample"}});
+        		#Add info to ST_APPROX
 
-    		#Add info to ST_APPROX
-    		push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Sample"});
-    		push (@st_approx_list, $attributeHash{$type_strain_hashes->{$key}->{1}->{"Sample"}});
-    		push (@st_approx_list, $st_calls{$type_strain_hashes->{$key}->{1}->{"Sample"}});
-    		push (@st_approx_list, $type_strain_hashes->{$key}->{1}->{"Identity"});
-
-    		push (@st_approx_list, $type_strain_hashes->{$key}->{2}->{"Sample"});
-    		push (@st_approx_list, $attributeHash{$type_strain_hashes->{$key}->{2}->{"Sample"}});
-    		push (@st_approx_list, $st_calls{$type_strain_hashes->{$key}->{2}->{"Sample"}});
-    		push (@st_approx_list, $type_strain_hashes->{$key}->{2}->{"Identity"});
-    	 }
+        		push (@st_approx_list, $type_strain_hashes->{$key}->{2}->{"Sample"});
+        		push (@st_approx_list, $attributeHash{$type_strain_hashes->{$key}->{2}->{"Sample"}});
+        		push (@st_approx_list, $st_calls{$type_strain_hashes->{$key}->{2}->{"Sample"}});
+        		push (@st_approx_list, $type_strain_hashes->{$key}->{2}->{"Identity"});
+            }
      }
+ }
 		print $st_all join( "\t", map { defined $_ ? $_ : '' } @st_out_list ) . "\n";
 		print $st_approx join( "\t", map { defined $_ ? $_ : '' } @st_approx_list ) . "\n";
 }
 
+
+sub check_neighbors{
+    my $tree = shift;
+    my $sample_of_interest = shift;
+    my $type_strain_id = shift;
+    my $st_hash = shift;
+    my %st_dict = %$st_hash;
+    my @nodes;
+    my @nodes_of_interest = ($sample_of_interest, $type_strain_id);
+    for my $i (@nodes_of_interest){
+        push (@nodes, $tree->find_node(-id => $i));
+    }
+
+    my $lca = $tree->get_lca(-nodes => \@nodes);
+    my @lca_nodes = $lca->get_all_Descendents;
+    my %sts_seen;
+    for my $node (@lca_nodes){
+        if ($node->is_Leaf){
+            my $node_id = $node->id;
+            $sts_seen{$st_dict{$node_id}} = 1;
+        }
+    }
+    if (defined $sts_seen{"UNKNOWN"}){
+        delete $sts_seen{"UNKNOWN"};
+    }
+    if (scalar keys %sts_seen > 1){
+        return 0;
+    } else {
+        return 1;
+    }
+
+}
 
 sub generate_dist_mat{
 	my $type_strains = shift;
