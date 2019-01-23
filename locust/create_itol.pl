@@ -89,7 +89,11 @@ foreach my $col (@columns_to_annotate){
 	my $colors_hash = create_color_hash(%$out_hash);
 	my ($shape_str, $colors_str, $labels_str) = create_legend_info(%$colors_hash);
 	my $out_file = "itol_" . $out_file_name . ".txt";
-	write_color_itol_file(\%$out_hash, \%$colors_hash, $shape_str, $colors_str, $labels_str, $out_file);
+    if ($data_type eq 'color'){
+	       write_color_itol_file(\%$out_hash, \%$colors_hash, $shape_str, $colors_str, $labels_str, $out_file);
+    } else {
+        write_text_itol_file(\%$out_hash, $out_file);
+    }
 }
 
 sub find_columns_to_annotate{
@@ -108,6 +112,25 @@ sub find_columns_to_annotate{
 	return @columns_to_use;
 }
 
+sub check_row_for_partials{
+    my @split_row = @_;
+    my $st_type = "0";
+    my %check_hash = map {$_ => 1} @split_row;
+    my @check_list = ("5'PRTL", "3'PRTL", "SHORT", "PSEUDO");
+    if (exists($check_hash{"NEW"})) {
+        $st_type = 'new';
+    }
+    foreach my $i (@check_list){
+        if (exists($check_hash{$i})) {
+            $st_type = 'unknown';
+        }
+    }
+    if ($st_type eq "0"){
+        $st_type = $split_row[1];
+    }
+    return $st_type;
+}
+
 sub create_annotation_hash{
 	my ($column, @row_values) = @_;
 	my $header = 0;
@@ -118,12 +141,16 @@ sub create_annotation_hash{
 			$out_file_prefix = $split_row[$column];
 			$header = 1;
 		} else {
-				my $sample = $split_row[0];
-				if ( defined $split_row[$column]){
-					$out_hash{$sample} = $split_row[$column];
-					} else {
-						$out_hash{$sample} = "UNKNOWN";
-					}
+                if ($column == 1){
+                    my $sample = $split_row[0];
+                    my $st = check_row_for_partials(@split_row);
+                    $out_hash{$sample} = $st;
+                } else {
+    				my $sample = $split_row[0];
+    				if ( defined $split_row[$column]){
+    					$out_hash{$sample} = $split_row[$column];
+                    }
+				}
 			}
  		}
 	return (\%out_hash, $out_file_prefix);
