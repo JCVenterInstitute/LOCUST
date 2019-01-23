@@ -207,7 +207,7 @@ foreach my $afasta (@malign_alleles){
     my $cmd = $MUSCLE_CMD . " -in $afasta -out $outaln";
     system("$cmd >/dev/null 2>&1") == 0 || die("ERROR: $cmd failed");
 }
-die("Trim Here");
+
 #trim multi-alignment fasta to remove gaps.
 my @afa_files = glob ("*.afa");
 foreach my $afa (@afa_files){
