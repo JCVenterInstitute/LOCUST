@@ -70,7 +70,7 @@ foreach (@ex_genomes){
 
     chomp;
     $ex_hsh->{$_} = 1;
-    
+
 }
 
 my %genomes_seen = ();
@@ -81,12 +81,12 @@ foreach my $gline (@glines){
     chomp $gline;
 
     my ($genome) = split(/\t/, $gline);
-    
+
     if(exists $ex_hsh->{$genome}){
 	print $lfh "Warning: Skipping $genome because it was included in the exclude genome list for having a MISSING or SHORT allele sequence\n";
     }else{
 	#extract genome field
-	
+
 	if ($header) {#check if first line is a header
 	    if ($gline =~ /^GENOME\tPATH/) {
 		$header = 0;
@@ -96,7 +96,7 @@ foreach my $gline (@glines){
 	}
 
 	$genome =~ s/\s+$//; #remove trailing spaces
-	
+
 	if(exists $genomes_seen{$genome}){
 	    print $lfh "WARNING: a genome is allowed to occur only once in the genome list file - ignoring the second line.\n";
 	    print $lfh "$gline\n$genomes_seen{$genome}\n";
@@ -104,7 +104,7 @@ foreach my $gline (@glines){
 	}else{
 	    $genomes_seen{$genome} = $gline;
 	}
-	
+
 	if(-s "$OUTPUT/$genome/$genome" . "_hits.txt"){
 	    push (@genomes, $genome);
 	}else{
@@ -167,7 +167,7 @@ foreach my $allele (@alleles_list){
     write_file($all_afile, map { "$_\n" } @afiles);
 }
 
-#Exclude allele.allGenomes.fa from multi-alignment if the allele is missing from any genome:  
+#Exclude allele.allGenomes.fa from multi-alignment if the allele is missing from any genome:
 #count sequences present in the allele file & exclude the file if the number is less than the #of genomes
 my @malign;
 
@@ -198,7 +198,7 @@ foreach my $file (@malign){
     }
 }
 
-#multiple alignment of alleles from genomes: run muscle - iterate over multi-genome allele fasta files 
+#multiple alignment of alleles from genomes: run muscle - iterate over multi-genome allele fasta files
 #(slurp fasta from each for input to muscle)
 my @malign_alleles = glob("*_AllGenomes.fa");
 foreach my $afasta (@malign_alleles){
@@ -213,10 +213,8 @@ my @afa_files = glob ("*.afa");
 foreach my $afa (@afa_files){
     my ($outprefix) = $afa =~ /^(\w+)\.afa/;
     my $trimaln = $outprefix."_trimmed_alignment.fasta";
-    
-
-    #Now set at .1 (1 - .1 = Remove positions with gaps in 90% or more of the sequences
-    my $cmd = $TRIM_CMD . " -in $afa -out $trimaln -gt .1 -fasta";
+    #Now set at .1 (1 - .01 = Remove positions with gaps in 99% or more of the sequences
+    my $cmd = $TRIM_CMD . " -in $afa -out $trimaln -gt .01 -fasta";
     system($cmd) == 0 || die("ERROR: $cmd failed");
 }
 
@@ -246,7 +244,7 @@ foreach my $genome (@genomes){
 	    next;
 	}
     }
-    
+
     #remove individual fasta ID lines to join all records into one string
     if(-s $genome."_all_alleles.fasta"){
 	my $mfasta = read_file ($genome."_all_alleles.fasta");
@@ -282,14 +280,14 @@ if(-s $infasta){
 	my $cmd = $RAXML_CMD;
 	$cmd = $cmd . " -p 1234 -f a -x 1234 -N 100 -m GTRGAMMA -n allGenomesJoinedAlleles.tree -s $infasta";
 	print "cmd = <$cmd>\n";
-	system("$cmd") == 0 || die("ERROR: Error running raxml"); 
+	system("$cmd") == 0 || die("ERROR: Error running raxml");
     }
-    
+
     if($opts{type} eq "fasttree"){
 	#generate ML tree
 	#my $cmd = $FASTTREE . " -nt -log allGenomesJoinedAlleles_fasttree.log allGenomesJoinedAlleles.afa >allGenomesJoinedAlleles_fasttree.tree";
 	my $cmd = $FASTTREE . " -nt -log allGenomesJoinedAlleles_fasttree.log $infasta >allGenomesJoinedAlleles_fasttree.tree";
-	system("$cmd") == 0 || die("ERROR: Error runing fasttree"); 
+	system("$cmd") == 0 || die("ERROR: Error runing fasttree");
     }
 
     #move files and cleanup
@@ -305,7 +303,7 @@ sub parse_config{
 
     my $cfg = Config::IniFiles->new(-file => "$opts{config}");
     my ($muscle,$trimal,$fasttree,$raxml);
-        
+
     if($cfg->val('muscle','muscle')){
 	$muscle = $cfg->val('muscle','muscle');
     }else{
@@ -328,7 +326,7 @@ sub parse_config{
 	if($raxml =~ /^\/macOS/){
 	    $raxml = "$Bin/$raxml";
 	}
-	
+
     }else{
 	#Default uses JCVI installation
 	$raxml = "$Bin/raxmlHPC";
@@ -339,11 +337,11 @@ sub parse_config{
 	if($trimal =~ /^\/macOS/){
 	    $trimal = "$Bin/$trimal";
 	}
-	
+
     }else{
 	#Default uses JCVI installation
 	$trimal = "$Bin/trimal";
     }
-    
+
     return ($muscle,$trimal,$fasttree,$raxml);
 }

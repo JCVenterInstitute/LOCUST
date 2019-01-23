@@ -35,6 +35,12 @@ create_itol.pl -  A script to generate ITOL annotations based upon ST
 
 B<--input_file, i>   : ST_all.out file from typer.pl run.
 
+B<--type_size, t>			: Number of Alleles in Schema.
+
+B<--attr_size, a>			: Number of Attributes in Schema.
+
+B<--data_type, d>			:Dataset type to make.
+
 B<--help, h>         : Display this help message.
 
 =head1  DESCRIPTION
@@ -52,6 +58,9 @@ my %opts;
 GetOptions(\%opts,
 	'help|h',
 	'input_file|i=s',
+	'type_size|t=i',
+	'attr_size|a=i',
+	'data_type|d=s',
 ) || die "Error getting options! $!";
 
 pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
@@ -59,8 +68,11 @@ pod2usage( { -exitval => 1, -verbose => 2 } ) if $opts{help};
 my @color_palette = ("rgba(102,194,165,1)", "rgba(252,141,98,1)", "rgba(141,160,203,1)", "rgba(231,138,195,1)", "rgba(166,216,84,1)", "rgba(255,217,47,1)", "rgba(229,196,148,1)", "rgba(179,179,179,1)", "rgba(228,26,28,1)", "rgba(55,126,184,1)", "rgba(77,175,74,1)", "rgba(152,78,163,1)", "rgba(255,127,0,1)", "rgba(255,255,51,1)", "rgba(166,86,40,1)", "rgba(247,129,191,1)", "rgba(153,153,153,1)", "rgba(141,211,199,1)", "rgba(255,255,179,1)", "rgba(190,186,218,1)", "rgba(251,128,114,1)", "rgba(128,177,211,1)", "rgba(253,180,98,1)", "rgba(179,222,105,1)", "rgba(252,205,229,1)", "rgba(217,217,217,1)", "rgba(188,128,189,1)", "rgba(204,235,197,1)", "rgba(255,237,111,1)", "rgba(137,197,218,1)", "rgba(218,87,36,1)", "rgba(116,217,68,1)", "rgba(206,80,202,1)", "rgba(63,73,33,1)", "rgba(192,113,124,1)", "rgba(203,213,136,1)", "rgba(95,127,199,1)", "rgba(103,55,112,1)", "rgba(211,217,62,1)", "rgba(56,51,62,1)", "rgba(80,133,120,1)", "rgba(215,193,177,1)", "rgba(104,144,48,1)", "rgba(173,111,59,1)", "rgba(205,155,205,1)", "rgba(209,66,133,1)", "rgba(109,222,136,1)", "rgba(101,41,38,1)", "rgba(127,220,192,1)", "rgba(200,66,72,1)", "rgba(133,105,213,1)", "rgba(94,115,143,1)", "rgba(209,163,61,1)", "rgba(138,124,100,1)", "rgba(89,152,97,1)", "rgba(102,194,165,0.5)", "rgba(252,141,98,0.5)", "rgba(141,160,203,0.5)", "rgba(231,138,195,0.5)", "rgba(166,216,84,0.5)", "rgba(255,217,47,0.5)", "rgba(229,196,148,0.5)", "rgba(179,179,179,0.5)", "rgba(228,26,28,0.5)", "rgba(55,126,184,0.5)", "rgba(77,175,74,0.5)", "rgba(152,78,163,0.5)", "rgba(255,127,0,0.5)", "rgba(255,255,51,0.5)", "rgba(166,86,40,0.5)", "rgba(247,129,191,0.5)", "rgba(153,153,153,0.5)", "rgba(141,211,199,0.5)", "rgba(255,255,179,0.5)", "rgba(190,186,218,0.5)", "rgba(251,128,114,0.5)", "rgba(128,177,211,0.5)", "rgba(253,180,98,0.5)", "rgba(179,222,105,0.5)", "rgba(252,205,229,0.5)", "rgba(217,217,217,0.5)", "rgba(188,128,189,0.5)", "rgba(204,235,197,0.5)", "rgba(255,237,111,0.5)", "rgba(137,197,218,0.5)", "rgba(218,87,36,0.5)", "rgba(116,217,68,0.5)", "rgba(206,80,202,0.5)", "rgba(63,73,33,0.5)", "rgba(192,113,124,0.5)", "rgba(203,213,136,0.5)", "rgba(95,127,199,0.5)", "rgba(103,55,112,0.5)", "rgba(211,217,62,0.5)", "rgba(56,51,62,0.5)", "rgba(80,133,120,0.5)", "rgba(215,193,177,0.5)", "rgba(104,144,48,0.5)", "rgba(173,111,59,0.5)", "rgba(205,155,205,0.5)", "rgba(209,66,133,0.5)", "rgba(109,222,136,0.5)", "rgba(101,41,38,0.5)", "rgba(127,220,192,0.5)", "rgba(200,66,72,0.5)", "rgba(133,105,213,0.5)", "rgba(94,115,143,0.5)", "rgba(209,163,61,0.5)", "rgba(138,124,100,0.5)", "rgba(89,152,97,0.5)", "rgba(102,194,165,0.75)", "rgba(252,141,98,0.75)", "rgba(141,160,203,0.75)", "rgba(231,138,195,0.75)", "rgba(166,216,84,0.75)", "rgba(255,217,47,0.75)", "rgba(229,196,148,0.75)", "rgba(179,179,179,0.75)", "rgba(228,26,28,0.75)", "rgba(55,126,184,0.75)", "rgba(77,175,74,0.75)", "rgba(152,78,163,0.75)", "rgba(255,127,0,0.75)", "rgba(255,255,51,0.75)", "rgba(166,86,40,0.75)", "rgba(247,129,191,0.75)", "rgba(153,153,153,0.75)", "rgba(141,211,199,0.75)", "rgba(255,255,179,0.75)", "rgba(190,186,218,0.75)", "rgba(251,128,114,0.75)", "rgba(128,177,211,0.75)", "rgba(253,180,98,0.75)", "rgba(179,222,105,0.75)", "rgba(252,205,229,0.75)", "rgba(217,217,217,0.75)", "rgba(188,128,189,0.75)", "rgba(204,235,197,0.75)", "rgba(255,237,111,0.75)", "rgba(137,197,218,0.75)", "rgba(218,87,36,0.75)", "rgba(116,217,68,0.75)", "rgba(206,80,202,0.75)", "rgba(63,73,33,0.75)", "rgba(192,113,124,0.75)", "rgba(203,213,136,0.75)", "rgba(95,127,199,0.75)", "rgba(103,55,112,0.75)", "rgba(211,217,62,0.75)", "rgba(56,51,62,0.75)", "rgba(80,133,120,0.75)", "rgba(215,193,177,0.75)", "rgba(104,144,48,0.75)", "rgba(173,111,59,0.75)", "rgba(205,155,205,0.75)", "rgba(209,66,133,0.75)", "rgba(109,222,136,0.75)", "rgba(101,41,38,0.75)", "rgba(127,220,192,0.75)", "rgba(200,66,72,0.75)", "rgba(133,105,213,0.75)", "rgba(94,115,143,0.75)", "rgba(209,163,61,0.75)", "rgba(138,124,100,0.75)", "rgba(89,152,97,0.75)", "rgba(102,194,165,0.25)", "rgba(252,141,98,0.25)", "rgba(141,160,203,0.25)", "rgba(231,138,195,0.25)", "rgba(166,216,84,0.25)", "rgba(255,217,47,0.25)", "rgba(229,196,148,0.25)", "rgba(179,179,179,0.25)", "rgba(228,26,28,0.25)", "rgba(55,126,184,0.25)", "rgba(77,175,74,0.25)", "rgba(152,78,163,0.25)", "rgba(255,127,0,0.25)", "rgba(255,255,51,0.25)", "rgba(166,86,40,0.25)", "rgba(247,129,191,0.25)", "rgba(153,153,153,0.25)", "rgba(141,211,199,0.25)", "rgba(255,255,179,0.25)", "rgba(190,186,218,0.25)", "rgba(251,128,114,0.25)", "rgba(128,177,211,0.25)", "rgba(253,180,98,0.25)", "rgba(179,222,105,0.25)", "rgba(252,205,229,0.25)", "rgba(217,217,217,0.25)", "rgba(188,128,189,0.25)", "rgba(204,235,197,0.25)", "rgba(255,237,111,0.25)", "rgba(137,197,218,0.25)", "rgba(218,87,36,0.25)", "rgba(116,217,68,0.25)", "rgba(206,80,202,0.25)", "rgba(63,73,33,0.25)", "rgba(192,113,124,0.25)", "rgba(203,213,136,0.25)", "rgba(95,127,199,0.25)", "rgba(103,55,112,0.25)", "rgba(211,217,62,0.25)", "rgba(56,51,62,0.25)", "rgba(80,133,120,0.25)", "rgba(215,193,177,0.25)", "rgba(104,144,48,0.25)", "rgba(173,111,59,0.25)", "rgba(205,155,205,0.25)", "rgba(209,66,133,0.25)", "rgba(109,222,136,0.25)", "rgba(101,41,38,0.25)", "rgba(127,220,192,0.25)", "rgba(200,66,72,0.25)", "rgba(133,105,213,0.25)", "rgba(94,115,143,0.25)", "rgba(209,163,61,0.25)", "rgba(138,124,100,0.25)", "rgba(89,152,97,0.25)");
 
 
-
 my $input_file = $opts{input_file} || die "Couldn't open the input file.\n";
+
+my $data_type = $opts{data_type};
+my $num_of_alleles = $opts{type_size};
+my $num_of_attributes = $opts{attr_size};
 
 my @full_st_array;
 open(my $fh, "<", $input_file) or die "Failed to open file: $!\n";
@@ -70,99 +82,94 @@ while(<$fh>) {
 }
 close $fh;
 
-
-my ($st_hash, $clonal_hash, $species_hash) = create_st_hash(@full_st_array);
-
-my $st_colors = create_color_hash(%$st_hash);
-my $clonal_colors = create_color_hash(%$clonal_hash);
-my $species_colors = create_color_hash(%$species_hash);
-
-my ($st_shape_str, $st_colors_str, $st_labels_str) = create_legend_info(%$st_colors);
-my ($clonal_shape_str, $clonal_colors_str, $clonal_labels_str) = create_legend_info(%$clonal_colors);
-my ($species_shape_str, $species_colors_str, $species_labels_str) = create_legend_info(%$species_colors);
-
-write_itol_file(\%$st_hash, \%$st_colors, $st_shape_str, $st_colors_str, $st_labels_str, "itol_ST.txt");
-if (%$clonal_hash){
-	print %$clonal_hash;
-	write_itol_file(\%$clonal_hash, \%$clonal_colors, $clonal_shape_str, $clonal_colors_str, $clonal_labels_str, "itol_clonal_complex.txt");
-} else {
-	print "No results were found to add to itol_clonal_complex.txt\n";
-}
-if (%$species_hash){
-	write_itol_file(\%$species_hash, \%$species_colors, $species_shape_str, $species_colors_str, $species_labels_str, "itol_species.txt");
-} else {
-	print "No results were found to add to itol_species.txt\n";
+my @columns_to_annotate = &find_columns_to_annotate($num_of_alleles, $num_of_attributes);
+#Loop through columns we're going to annotate
+foreach my $col (@columns_to_annotate){
+	my ($out_hash, $out_file_name) = &create_annotation_hash($col, @full_st_array);
+	my $colors_hash = create_color_hash(%$out_hash);
+	my ($shape_str, $colors_str, $labels_str) = create_legend_info(%$colors_hash);
+	my $out_file = "itol_" . $out_file_name . ".txt";
+    if ($data_type eq 'color'){
+	       write_color_itol_file(\%$out_hash, \%$colors_hash, $shape_str, $colors_str, $labels_str, $out_file);
+    } else {
+        write_text_itol_file(\%$out_hash, $out_file);
+    }
 }
 
-sub create_st_hash{
-	my @full_st_array = @_;
-	my %st_hash, my %clonal_hash, my %species_hash, my $clonal_column, my $species_column;
-	my @header = split("\t", $full_st_array[0]);
-	for (my $i = 0; $i < scalar @header; $i++){
-		if ($header[$i] eq "clonal_complex"){
-			$clonal_column = $i;
-		}
-		if ($header[$i] eq "species"){
-			$species_column = $i;
+sub find_columns_to_annotate{
+	my @columns_to_use;
+	#Push ST column
+	push (@columns_to_use, 1);
+	my ($num_of_alleles, $num_of_attributes) = @_;
+
+	if ($num_of_attributes != 0){
+		my $first_column = $num_of_alleles + 2;
+		my $max_column = $num_of_alleles + 2 + $num_of_attributes;
+		for (my $i = $first_column; $i < $max_column; $i++){
+			push (@columns_to_use, $i);
 		}
 	}
-	for (my $i = 1; $i <  scalar @full_st_array; $i++){
-	my @row = split "\t", $full_st_array[$i];
+	return @columns_to_use;
+}
 
-	my $genome = $row[0];
-	my $ST_CALL = $row[1];
+sub check_row_for_partials{
+    my @split_row = @_;
+    my $st_type = "0";
+    my %check_hash = map {$_ => 1} @split_row;
+    my @check_list = ("5'PRTL", "3'PRTL", "SHORT", "PSEUDO");
+    if (exists($check_hash{"NEW"})) {
+        $st_type = 'new';
+    }
+    foreach my $i (@check_list){
+        if (exists($check_hash{$i})) {
+            $st_type = 'unknown';
+        }
+    }
+    if ($st_type eq "0"){
+        $st_type = $split_row[1];
+    }
+    return $st_type;
+}
 
-	if ($species_column){
-		my $species = $row[$species_column];
-		if ($species){
-			$species_hash{$genome} = $species;
+sub create_annotation_hash{
+	my ($column, @row_values) = @_;
+	my $header = 0;
+	my (%out_hash, $out_file_prefix);
+	foreach my $row (@row_values){
+		my @split_row = split("\t", $row);
+		if ($header == 0){
+			$out_file_prefix = $split_row[$column];
+			$header = 1;
 		} else {
-				$species_hash{$genome} = "";
-		}
-}
-	if ($clonal_column){
-		my $clonal_complex = $row[$clonal_column];
-		if ($clonal_complex){
-			$clonal_hash{$genome} = $clonal_complex;
-		} else {
-			$clonal_hash{$genome} = "";
-		}
-}
-	my $row_length = scalar @row;
-	my @allele_designations = @row[2 .. $row_length];
-	#Captures any NEW allele calls-- immediately designates ST as new
-	if ( "NEW" ~~ @allele_designations) {
-		$ST_CALL = "new";
-	}
-	#Captures Short or Missing allele calls-- immediately designates ST as unknown
-	if ("SHORT" ~~ @allele_designations || "MISSING" ~~ @allele_designations || "TRUNC" ~~ @allele_designations){
-		$ST_CALL = "unknown";
-	}
-	#Captures those with all alleles called but unknown to ST schema file. All UNKNOWN ST's should have been removed already except for these.
-	if ((not "NEW" ~~ @allele_designations) && $ST_CALL eq "UNKNOWN") {
-		$ST_CALL = "new";
-	}
-
-	$st_hash{$genome} = $ST_CALL;
-	}
-
-	return (\%st_hash, \%clonal_hash, \%species_hash);
+                if ($column == 1){
+                    my $sample = $split_row[0];
+                    my $st = check_row_for_partials(@split_row);
+                    $out_hash{$sample} = $st;
+                } else {
+    				my $sample = $split_row[0];
+    				if ( defined $split_row[$column]){
+    					$out_hash{$sample} = $split_row[$column];
+                    }
+				}
+			}
+ 		}
+	return (\%out_hash, $out_file_prefix);
 }
 
 sub create_color_hash{
 	my %st_hash = @_;
 	my %color_hash;
 	my $count = 0;
-	foreach (values %st_hash){
-	if ($color_hash{$_}){
+	foreach my $val (values %st_hash){
+	if ($color_hash{$val}){
 		next;
 	}
 	else{
 		if ($count < scalar @color_palette){
-			$color_hash{$_} = $color_palette[$count];
+			$color_hash{$val} = $color_palette[$count];
 		}
 		else {
-			$color_hash{$_} = $color_palette[$count % scalar @color_palette];
+			$color_hash{$val} = $color_palette[$count % scalar @color_palette];
 		}
 	}
 	$count ++;
@@ -185,7 +192,7 @@ sub create_legend_info{
  return ($legend_shape_str, $legend_colors_str, $legend_labels_str);
 }
 
-sub write_itol_file{
+sub write_color_itol_file{
 	my ($st_hash, $color_hash, $legend_shape_str, $legend_colors_str, $legend_labels_str, $filename) = @_;
 	my %st_hash = %$st_hash;
 	my %color_hash = %$color_hash;
@@ -213,4 +220,17 @@ sub write_itol_file{
 			print $oh "No results were found.";
 			close $oh;
 		}
+}
+
+sub write_text_itol_file{
+	my ($st_hash, $filename) = @_;
+	my %st_hash = %$st_hash;
+	open (my $oh, ">", $filename) or die "Couldn't open the outfile: $filename";
+	print $oh "DATASET_TEXT\n";
+	print $oh "SEPERATOR TAB\n";
+	print $oh "DATASET_LABEL\tSequence Type\n";
+	print $oh "DATA\n";
+	while (my ($key, $value) = each (%st_hash)) {
+		print $oh "$key\t$value\t-1\t#000000\tnormal\t1\t0\n";
+	}
 }

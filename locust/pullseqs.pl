@@ -64,7 +64,7 @@ use lib "$Bin";
 
 ############################ OPTIONS ###############################
 
-my ($fastafile, $blastfile, $allele_file, $seeds, $max_mismatch, $help, $DEBUG, $VERBOSE);
+my ($fastafile, $blastfile, $allele_file, $seeds, $max_mismatch, $help, $skip_translation, $DEBUG, $VERBOSE);
 my %opts = (
     "fastafile=s" => \$fastafile,
     "blastfile=s" => \$blastfile,
@@ -73,13 +73,13 @@ my %opts = (
     "debug" => \$DEBUG,
     "max_mismatch=s" => \$max_mismatch,
     "seeds=s" => \$seeds,
+    "skip_translation=i" => \$skip_translation,
     "verbose" => \$VERBOSE,
     );
 
 &GetOptions(%opts);
 
 $max_mismatch = 5 unless($max_mismatch); #sets max number of nucleotides which can be unaligned on either side of the query allele blast match
-
 ###################### PROCESS ARGS AND OPTIONS #####################
 
 # GRAB THE PROGRAM NAME
@@ -190,20 +190,19 @@ while (<INFILE>) {
 
 	#Only pull sequences that have max_mismatch or less number of nucleotides that can be not matched on either end of the blast alignment
 	if(!$short){
-	    
 	    my $cutFasta = "$Bin/cutFasta -f $tokens[0] -x $tokens[8] -y $tokens[9] ";
 	    $cutFasta .= "-s \"$tokens[1]\" $fastafile";
-	    
+
 	    #print "cutFasta command: $cutFasta\n";
 	    print LOGFILE "cutFasta command: $cutFasta\n";
-	    
+
 	    my @seqlines = `$cutFasta`;
 	    my $header = $seqlines[0];
 	    my $fasta_sequence = join("", @seqlines[1 .. $#seqlines]);
 	    my $fasta_entry = $header . $fasta_sequence;
-	    
+
 	    open(my $stringfh, "<", \$fasta_entry) or die "Couldn't open sequence for reading: $!";
-	    
+
 	    my $seqio = Bio::SeqIO->new(
 		-fh => $stringfh,
 		-format => "fasta",
@@ -214,81 +213,79 @@ while (<INFILE>) {
 	    my $translated_sequence = $sequence->translate(
 		-codontable_id => 11,
 		);
+        my $reverse_sequence = $sequence->revcom();
+        my $translated_reverse_sequence = $reverse_sequence->translate(
+        -codontable_id => 11,
+        );
+
 	    my $nuc_length = $sequence->length;
 	    my $prot_length = $translated_sequence->length;
+        my $reverse_prot_length = $translated_reverse_sequence->length;
+
 	    my $pred_prot_seq = int($nuc_length / 3);
-	    
+
+        unless ($skip_translation){
 	    if (-e $pepfile){
-		
-		open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
-	    
-	    } else {
-	
-		open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
-	    
+		    open (PEPFILE, ">>", "$pepfile") || die "Can't open $pepfile: $!";
+        } else {
+            open (PEPFILE, ">", "$pepfile") || die "Can't open $pepfile: $!";
 	    }
-	    
 	    print PEPFILE $header;
 	    print PEPFILE $translated_sequence->seq . "\n";
 	    close(PEPFILE);
-	    
-	    if (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") == -1) || index($translated_sequence->seq, "*") + 1 == $prot_length )) {
+    }
+	    if (((($pred_prot_seq == $prot_length) || ($pred_prot_seq == $reverse_prot_length))
+        &&  (((index($translated_sequence->seq, "*") == -1) || index($translated_sequence->seq, "*") + 1 == $prot_length )
+        || ((index($translated_reverse_sequence->seq, "*") == -1) || index($translated_reverse_sequence->seq, "*") + 1 == $prot_length))) || ($skip_translation) ) {
 
-		my $ambig_flag = 0;
-		
 		for my $seq (@seqlines) {
 		    #print $seq;
 		    print OUTFILE $seq;
 		    print LOGFILE $seq;
-
-		    unless($seq =~ /^>/){
-			chomp $seq;
-			
-		        $ambig_flag = 1 if($seq =~ /[^ATGCacgt+]/);
-		    }
 		}
-		
-		print LOGFILE "WARN: Sequence contains ambigious characters\n" if $ambig_flag;
-	    
-	    } elsif (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") != -1) && index($translated_sequence->seq, "*" != $prot_length ))) {
-	
+
+    } elsif (($pred_prot_seq == $prot_length) && ((index($translated_sequence->seq, "*") != -1) && index($translated_sequence->seq, "*" != $prot_length ))) {
+
 		print OUTFILE "$header\n";
 		print OUTFILE "PSEUDO\n";
 		print LOGFILE "WARN: Printed PSEUDO as sequence because it had a premature stop when translated.\n";
 
-	    } else {
-
-		print OUTFILE ">$tokens[0]\n";
-		print OUTFILE "NEW\n";
-		print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit without a truncation event.\n";
-
-	    }
-
+	} else {
+            if (!$skip_translation){
+        		print OUTFILE ">$tokens[0]\n";
+        		print OUTFILE "NEW\n";
+        		print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit without a truncation event.\n";
+    	    } else {
+                print OUTFILE ">$tokens[0]\n";
+        		print OUTFILE "NEW\n";
+        		print LOGFILE "WARN: Printed NEW as sequence because one it was a non 100% hit.\n";
+            }
+        }
 	} else {
 
 	    if (($tokens[8] == $tokens[13] || $tokens[8] == 1) && ($perc_matched < 1)){
-		
+
 		print OUTFILE ">$tokens[0]\n";
 		print OUTFILE "5'PRTL\n";
 		print LOGFILE "WARN: Printed 5'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
-	    
+
 	    } elsif (($tokens[9] == $tokens[13] || $tokens[9] == 1) && ($perc_matched < 1)){
-		
+
 		print OUTFILE ">$tokens[0]\n";
 		print OUTFILE "3'PRTL\n";
 		print LOGFILE "WARN: Printed 3'PRTL as sequence because one it was a non full length hit at the end of the contig.\n";
-	    
+
 	    } else {
-		
+
 		print OUTFILE ">$tokens[0]\n";
 		print OUTFILE "SHORT\n";
 		print LOGFILE "WARN: Printed SHORT as sequence because unaligned nucleotides were greater than $max_mismatch cutoff\n";
 	    }
 	}
-	
-	
+
+
 	print LOGFILE "\n\n";
-    
+
     }
 
 }

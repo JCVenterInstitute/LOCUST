@@ -192,8 +192,8 @@ sub change_schema_header{
       my @header_columns = split(/\t/, $line);
       for (my $i = 0; $i < scalar @header_columns; $i++){
         if ($i == 0){
-          print "How many alleles are present in this schema?\n";
           print join("\t", @header_columns) . "\n";
+          print "How many alleles are present in this schema:  ";
           my $loci_count = <STDIN>;
           chomp $loci_count;
           $header_columns[$i] = $header_columns[$i] . "($loci_count)";
