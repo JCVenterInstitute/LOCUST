@@ -202,8 +202,8 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'input_path=s',
 	    'multi_copy',
 	    'skip_itol',
-		"itol_text",
-        "skip_translation",
+	    "itol_text",
+	    "skip_translation",
 	    'help|h') || die "Error getting options! $!";
 
 
@@ -710,10 +710,10 @@ sub clean_current_output_dir{
 	copy($opts{original_input_file}, "$prev_dir/original_input.list");
     }
 
-    move("$orig_dir/ST_all.out", $prev_dir) if(-s "$orig_dir/ST_all.out");
-    move("$orig_dir/NOVEL_alleles.fa", $prev_dir) if(-s "$orig_dir/NOVEL_alleles.fa");
-    move("$orig_dir/novel_schema" , "$prev_dir/novel_schema") if (-d "$orig_dir/novel_schema");
-    move("$orig_dir/append_schema" , "$prev_dir/append_schema") if (-d "$orig_dir/append_schema");
+    copy("$orig_dir/ST_all.out", $prev_dir) if(-s "$orig_dir/ST_all.out");
+    copy("$orig_dir/NOVEL_alleles.fa", $prev_dir) if(-s "$orig_dir/NOVEL_alleles.fa");
+    copy("$orig_dir/novel_schema" , "$prev_dir/novel_schema") if (-d "$orig_dir/novel_schema");
+    copy("$orig_dir/append_schema" , "$prev_dir/append_schema") if (-d "$orig_dir/append_schema");
 
     my @trees = glob("$orig_dir/*tree*");
     foreach(@trees){
