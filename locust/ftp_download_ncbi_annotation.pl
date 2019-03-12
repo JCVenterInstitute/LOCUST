@@ -88,6 +88,8 @@ B<--cleanup_ids>                :   For use with B<--download_only>, will cleanu
 
 B<--separate_downloads>         :   Place each downloaded file into a directory within B<--output_dir> named by the newly generated ID for that genome.
 
+B<--exclusion_list>             :   File containing a list of assembly accessions that should NOT be included, even if they match other criteria.
+
 B<--help, -h>                   :   Print this help.
 
 =head1 DESCRIPTION
@@ -126,7 +128,10 @@ and to use a specific local copy of an assembly_summary.txt file using B<--assem
 =head1 INPUTS
 
 The B<--organism_search_term> provides a string that will be interpreted as a regular expression used against the
-fields in the assembly_summary.txt file that hold organism name information.  If more advanced regex are supplied,
+fields in the assembly_summary.txt file that hold organism name information.  If the term supplied is of the form:
+ "word word" (for example, "Ruminococcus gnavus")
+the term will be modifed to allow for the very few cases where the organism_name field of assembly_summary.txt includes
+square brackets around the genus name.  (For example, "[Ruminococcus] gnavus". )  If more advanced regex are supplied,
 or if a regex was used that required fancy shell-escaping to get passed in, it might be useful to run this script in
 B<--no_download mode>, examine the resulting .mapping and/or .download files, and once deemed satisfactory, proceed with
 operation in B<--download_only> mode (or simply rerun without B<--no_download>, as the script doesn't mind writing over 
@@ -146,6 +151,9 @@ genome) compare the supplied value with the value in _assembly_stats.txt for 'co
 that have more than B<--max_contgs> contigs, and will allow genomes if they have a value of 'contig-count' equal to or 
 less than B<--max_contigs>.
 
+If B<--exclusion_list> is provided, this script will build a list of the included assembly accesssions and will omit
+any assemblies from that list, even if those assemblies match other criteria for exclusion.
+
 =head1 OUTPUTS
 
 There are three files produced under normal operation and when run in B<--no_download> mode:
@@ -156,19 +164,25 @@ There are three files produced under normal operation and when run in B<--no_dow
 
 =over 2 
 
-=item 1. Biosample ID (if present)
+=item 1. Assembly accession
 
-=item 2. organism name as found in assembly_summary.txt
+=item 2. Bioproject ID
 
-=item 3. strain fields as found in assembly_summary.txt
+=item 3. Biosample ID (if present, else "NA" )
 
-=item 4. contig_n50 from the assembly's _assembly_stats.txt file
+=item 4. wgs master record (if present, else "NA" ))
 
-=item 5. contig_count  from the assembly's _assembly_stats.txt file
+=item 5. organism name as found in assembly_summary.txt
 
-=item 6. total_length from the assembly's _assembly_stats.txt file
+=item 6. strain fields as found in assembly_summary.txt
 
-=item 7. type-strains will have 'type strain' here
+=item 7. contig_n50 from the assembly's _assembly_stats.txt file
+
+=item 8. contig_count  from the assembly's _assembly_stats.txt file
+
+=item 9. total_length from the assembly's _assembly_stats.txt file
+
+=item 10. type-strains will have 'type strain' here
 
 =back
 
@@ -233,6 +247,7 @@ GetOptions( \%opts,
             'cleanup_ids',
             'download_file|d=s',
             'download_only',
+            'exclusion_list=s',
             'fasta',
             'gb',
             'id_length=i',
@@ -261,6 +276,22 @@ check_options();
 # take care of filnames
 $opts{ output_dir } = $opts{ output_dir } // getcwd() . '/output_dir';
 mkdir $opts{ output_dir } unless ( -d $opts{ output_dir } );
+
+my %exclusion_list;
+if ( $opts{ exclusion_list } ) {
+
+    open( my $efh, '<', $opts{ exclusion_list } ) || die "Can't open exclusion_list: $!\n";
+    while ( <$efh> ) {
+        chomp;
+        my $fields = scalar( split(/\s/,$_) );
+        if ( ( $_ !~ /^GC[AF]_/ ) || $fields > 1 ) {
+            die "This line in the exclusion_list doean't look like it contains only a single assembly_accession:\n$_\n";
+        }
+        $exclusion_list{ $_ }++;
+
+    }
+
+}
 
 my $mapping_file = $opts{ mapping_file } // $opts{ output_prefix } . '.mapping';
 my $download_file = $opts{ download_file } // (fileparse( $mapping_file, qr/\.[^.]*/ ))[0] . '.download';
@@ -356,15 +387,16 @@ sub parse_data {
 
     my %matched_assemblies;
     my %candidates;
-    my @field_list = qw/biosample infraspecific_name isolate version_status assembly_level ftp_link type_strain/;
+    my @field_list = qw/bioproject biosample wgs_master infraspecific_name isolate version_status assembly_level ftp_link type_strain/;
     for my $line ( split( "\n", $data ) ) {
 
         next if ( $line =~ /^#/ );
 
         my @line_array = split( "\t", $line );
 
-        # Need columns 1, 3, 8, 9, 11, 12 (index 0, 2, 7, 8, 10, 11)
+        # Need columns 1-4, 8, 9, 11, 12, 20, 22 (index 0-3, 7, 8, 10, 11, 19, 21)
         my $assembly_accession  = $line_array[0];
+        my $bioproject          = $line_array[1];
         my $biosample           = $line_array[2];
         my $wgs_master          = $line_array[3];
         my $infraspecific_name  = $line_array[7];
@@ -376,9 +408,16 @@ sub parse_data {
 
         # check if it matches organism_search_term or our other search criteria
         if ( $opts{ organism_search_term } ) {
+
+            # This hack is needed for the few unfortunate souls attempting to retrieve
+            # genomes that have somehow made it into assembly_summary.txt with BRACKETS IN THE NAME.  Sheesh.
+            if ( $opts{ organism_search_term } =~ /^([[:alpha:]]+)(\s+)([[:alpha:]]+)$/ ) { # Only do this when the search term is like "word word" to avoid gunking up other cases.
+                $opts{ organism_search_term } = "([\\\[]?)$1([\\\]]?) $3";              # Surround the first word in the term with brackets that may or may not be there.
+            }
+
             if ( $infraspecific_name =~ qr($opts{ organism_search_term }) ) {
-                next if exists $matched_assemblies{ $wgs_master };
-                $matched_assemblies{ $wgs_master }++;
+                next if exists $matched_assemblies{ $assembly_accession };
+                $matched_assemblies{ $assembly_accession }++;
             } else {
                 next;
             }
@@ -422,8 +461,17 @@ sub parse_data {
         $type_strain = $type_strain // 'NA';
         $line_array[21] = $type_strain;
 
+        # Also wgs_master
+        $wgs_master = $wgs_master // 'NA';
+        $line_array[3] = $wgs_master;
+
         # At this point, this genome has passed the first round of 'cuts'.  Move it to the list of genomes for which to download assembly_stats.txt
-        @{$candidates{ $assembly_accession }}{ @field_list } = @line_array[2,7,8,10,11,19,21];
+        # That is, unless it's on the --exclusion_list
+        if ( exists $exclusion_list{ $assembly_accession } ) {
+            _log( "Skipping because $assembly_accession is on the exclusion list:\t$line\n", 1 );
+            next;
+        }
+        @{$candidates{ $assembly_accession }}{ @field_list } = @line_array[1,2,3,7,8,10,11,19,21];
         $candidates{ $assembly_accession }->{ line } = $line;
         
     }
@@ -519,7 +567,7 @@ sub filter_on_assembly_data {
         my @asmbl_data = read_file( $assembly_stats_file );
 
         # Just a little assignment of values into a list using an array reference as a hash reference slice:
-        my ( $biosample, $infraspecific_name, $isolate, $version_status, $assembly_level, $ftp_link, $type_strain ) = 
+        my ( $bioproject, $biosample, $wgs_master, $infraspecific_name, $isolate, $version_status, $assembly_level, $ftp_link, $type_strain ) = 
                 @{$candidates->{ $assembly_accession }}{ @$field_list };
         my $line = $candidates->{ $assembly_accession }->{ line };
 
@@ -553,7 +601,7 @@ sub filter_on_assembly_data {
         my $id = check_row( $biosample, $infraspecific_name, $isolate, $line, $download, $mapping, \$dupe_index );
 
         if ( $id ) {
-            add_rows( $download, $mapping, $id, $biosample, $ftp_link, $infraspecific_name, $isolate, $N50, $contig_count, $total_length, $type_strain );
+            add_rows( $download, $mapping, $id, $assembly_accession, $bioproject, $wgs_master, $biosample, $ftp_link, $infraspecific_name, $isolate, $N50, $contig_count, $total_length, $type_strain );
         }
 
         unlink $assembly_stats_file;
@@ -756,7 +804,8 @@ sub get_assembly_stats {
 
 sub add_rows {
 
-    my ( $download, $mapping, $id, $biosample, $ftp_link, $infraspecific_name, $isolate, $N50, $contig_count, $total_length, $type_strain ) = @_;
+    my ( $download, $mapping, $id, $assembly_accession, $bioproject, $wgs_master, $biosample, $ftp_link,
+         $infraspecific_name, $isolate, $N50, $contig_count, $total_length, $type_strain ) = @_;
 
     # store line for the .downlaod file
     $download->{ $id } = $ftp_link;
@@ -776,7 +825,7 @@ sub add_rows {
 
     $isolate =~ s/strain=(.*)/$1/;
 
-    $mapping->{ $id } = "$biosample\t$infraspecific_name\t$isolate\t$N50\t$contig_count\t$total_length\t$type_strain";
+    $mapping->{ $id } = "$assembly_accession\t$bioproject\t$biosample\t$wgs_master\t$infraspecific_name\t$isolate\t$N50\t$contig_count\t$total_length\t$type_strain";
     $biosamples{ $biosample }++;
 
 }
@@ -1176,9 +1225,18 @@ sub check_options {
         $errors .= "--section MUST be either 'refseq' or 'genbank' or 'both'\n";
     } 
     $opts{ id_type }        = $opts{ id_type }          // $DEFAULT_ID_TYPE;
-    unless ( $opts{ id_type } =~ /^(normal|biosample)/ ) {
+    unless ( $opts{ id_type } =~ /^(normal|biosample|biosamples)$/ ) {
         $errors .= "--id_type MUST be either 'normal' or 'biosample'\n";
     }
+    $opts{ id_type } = 'biosample' if $opts{ id_type } eq 'biosamples';
+
+    if ( $opts{ exclusion_list } ) {
+
+        $errors .= "Can't find --exclusion_list $opts{ exclusion_list } (or it's empty)\n"
+            unless ( -s $opts{ exclusion_list } );
+
+    }
+
     $opts{ output_prefix }  = $opts{ output_prefix }    // "$opts{ section }_$DEFAULT_OUTPUT_BASENAME.$TODAY";
 
 
