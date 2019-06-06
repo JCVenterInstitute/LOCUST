@@ -48,7 +48,7 @@ unless($opts{seed_file} && $opts{type} && $opts{input_file} && $opts{output}){
 }
 
 if(!(lc($opts{type}) eq "raxml" or lc($opts{type}) eq "fasttree")){
-    die("ERROR: the arugment value '$opts{type}' for tree option is not valid. The valid entries are 'raxml' or 'fasttree'");
+    die("ERROR: the argument value '$opts{type}' for tree option is not valid. The valid entries are 'raxml' or 'fasttree'");
 }
 #OPEN LOG FILE
 open(my $lfh, ">", "$opts{output}/tree_builder.log");
@@ -56,6 +56,7 @@ open(my $lfh, ">", "$opts{output}/tree_builder.log");
 #make new directory for alleles
 my $pwd = cwd();
 my $OUTPUT = ($opts{output} =~ /^\//) ? $opts{output} : "$pwd/" . $opts{output};
+print $OUTPUT . "\n";
 mkdir ("$OUTPUT/alleles") unless (-d "$OUTPUT/alleles");
 chdir ("$OUTPUT/alleles") or die "Cannot create or access directory '$OUTPUT/alleles': $!\n";
 
@@ -172,6 +173,7 @@ foreach my $allele (@alleles_list){
 my @malign;
 
 foreach my $allele (@alleles_list){
+    #Add allele file prepend here?
     my $infile = $allele."_inAllGenomes.txt";
     my @allelefiles = read_file ($infile);
 
@@ -213,8 +215,10 @@ my @afa_files = glob ("*.afa");
 foreach my $afa (@afa_files){
     my ($outprefix) = $afa =~ /^(\w+)\.afa/;
     my $trimaln = $outprefix."_trimmed_alignment.fasta";
-    #Now set at .1 (1 - .01 = Remove positions with gaps in 99% or more of the sequences
-    my $cmd = $TRIM_CMD . " -in $afa -out $trimaln -gt .01 -fasta";
+
+
+    #Now set at .1 (1 - .1 = Remove positions with gaps in 90% or more of the sequences
+    my $cmd = $TRIM_CMD . " -in $afa -out $trimaln -gt .1 -fasta";
     system($cmd) == 0 || die("ERROR: $cmd failed");
 }
 
