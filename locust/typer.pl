@@ -156,6 +156,8 @@ use File::Touch;
 use Path::Tiny;
 use Cwd;
 use Bio::SeqIO;
+use Bio::AlignIO;
+use Bio::SimpleAlign;
 use Config::IniFiles;
 use FindBin qw($Bin);
 use lib "$Bin";
@@ -255,7 +257,16 @@ my $combined_input_file;
 
 #create seed file if not provided and requested and not already present
 $opts{seed_file} = create_seed($opts{alleles}) unless ($opts{seed_file});
+
 my $SEED_ALLELES = find_seed_alleles($opts{seed_file});
+my @seeds_by_allele = align_seeds();
+
+my @removal_ids;
+foreach my $alignment_file (@seeds_by_allele){
+    my @bad_ids = check_bad_start_seeds($alignment_file);
+    push @removal_ids, @bad_ids;
+}
+$opts{seed_file} = remove_bad_seeds($opts{seed_file}, @removal_ids);
 
 my ($sth,$nth);
 my $new_allele_fa = "$OUTPUT/NOVEL_alleles.fa";
@@ -557,7 +568,6 @@ sub find_seed_alleles{
 
     my @seeds = keys %$seed_alleles;
     $seed_alleles = undef;
-
     return \@seeds;
 }
 
@@ -590,7 +600,7 @@ sub download_from_ncbi{
     $base_cmd .= " --min_N50 $opts{min_n50}" if $opts{min_n50};
     $base_cmd .= " --max_contigs $opts{max_contigs}" if $opts{max_contigs};
     $base_cmd .= " --id_type biosample";
-    
+
     if($opts{genome_type}){
 	if($opts{genome_type} eq 'cg'){
 	    $base_cmd .= " --cg";
@@ -807,7 +817,7 @@ sub strain_approximation{
 	my $ST_type_size = shift;
 	print $lfh "|Step: Generating st approximations.\n";
 
-	my $cmd = "perl $Bin/strain_approximation.pl";
+	my $cmd = "perl $Bin/cluster_approximation.pl";
 	$cmd .= " -i $opts{input_file}";
 	$cmd .= " -s ST_all.out";
 	$cmd .= " -t $ST_type_size";
@@ -1079,6 +1089,107 @@ file.nsq");
     close($sfh);
     return $seed_file;
 }
+
+sub align_seeds{
+    unlink glob("*_seeds.mfa");
+    unlink glob("*_seeds_aligned.mfa");
+    my $cfg = Config::IniFiles->new(-file => "$opts{config}");
+    my $muscle;
+    if($cfg->val('muscle','muscle')){
+	$muscle = $cfg->val('muscle','muscle');
+    }else{
+	#Default uses JCVI installation
+	$muscle = "/usr/local/bin/muscle";
+    }
+    my $seed_file = "$OUTPUT/seeds_from_alleles.fa";
+    my $seqio = Bio::SeqIO->new(-file => $seed_file,
+                                -format => 'fasta');
+
+    my %alleles_files;
+    while (my $seq = $seqio->next_seq){
+        my $seed_name = $seq->id;
+        my $seed_sequence = $seq->seq;
+        my ($allele_name, $allele_number) = split /_/, $seed_name, -1;
+        my $file_name = $allele_name . "_seeds.mfa";
+        $alleles_files{$allele_name} = 1;
+        if (-e $file_name){
+            open (my $mfa, ">>", $file_name) or die "Couldn't open $file_name";
+
+            print $mfa ">$seed_name\n";
+            print $mfa "$seed_sequence\n";
+            close $mfa;
+        } else {
+            open (my $mfa, ">", $file_name) or die "Couldn't open $file_name";
+            print $mfa ">$seed_name\n";
+            print $mfa "$seed_sequence\n";
+            close $mfa;
+        }
+    }
+    my @alleles = keys %alleles_files;
+    my @out_files;
+    foreach my $allele (@alleles){
+        my $infile = $allele . "_seeds.mfa";
+        my $outfile = $allele . "_seeds_aligned.mfa";
+        push @out_files, $outfile;
+        my $cmd = $muscle . " -in $infile -out $outfile -quiet";
+    	print $lfh "Running: $cmd\n";
+    	system($cmd) == 0 || die("ERROR: $cmd failed");
+    }
+    return @out_files;
+}
+
+sub check_bad_start_seeds{
+    my $align_file = shift;
+    my $in = Bio::AlignIO->new(-file => $align_file,
+                                 -format => 'fasta');
+    my $aln = $in->next_aln();
+    my $consensus_sequence = $aln->consensus_iupac(0);
+    my @split_sequence = split(//, $consensus_sequence);
+    my $count;
+    for (my $i = 0; $i <= scalar @split_sequence; $i++){
+        if ($split_sequence[$i] ne lc $split_sequence[$i]){
+            $count = $i;
+            last;
+            }
+        }
+    my @bad_alleles;
+    if ($count > 0){
+        my $seqio = Bio::SeqIO->new(-file => $align_file,
+                                    -format => 'fasta');
+        while (my $seq = $seqio->next_seq){
+            my $sequence = $seq->seq;
+            my $remove = "False";
+            foreach my $i (substr $sequence, 0, $count){
+                if ($i ne "-"){
+                    #Indicates this is one of the
+                    $remove = "True";
+                }
+            }
+            if ($remove eq "True"){
+                push @bad_alleles, $seq->id;
+            }
+        }
+    }
+    return @bad_alleles;
+}
+
+sub remove_bad_seeds{
+    my ($seed_file, @bad_alleles) = @_;
+    print join(' ', @bad_alleles) . "\n";
+
+    my $seqio = Bio::SeqIO->new(-file => $seed_file,
+                                -format => 'fasta');
+    my $outfile = "$OUTPUT/trimmed_seeds_from_alleles.fa";
+    open (my $ofh, ">", $outfile) or die "Couldn't open $outfile\n";
+    while (my $seq = $seqio->next_seq){
+        if (! grep {$_ eq $seq->id} @bad_alleles){
+            print $ofh ">" . $seq->id . "\n";
+            print $ofh $seq->seq . "\n";
+        }
+    }
+    return $outfile;
+}
+
 sub remove_short_seq_stubs{
 
     my $top_seqs_files = shift;
