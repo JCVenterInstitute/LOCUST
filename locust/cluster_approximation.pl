@@ -11,7 +11,7 @@ use lib "$Bin";
 =head1 NAME
 
 strain_approximation.pl -  A script to approximate ST's using Multiple Sequence
-                           Alignments and the Kimura distance between these
+                           Alignments and the raw distance between these
                            alignments.
 =head1 SYNOPSIS
 
@@ -69,7 +69,6 @@ my %st_hash = %$st_hash;
 #Step 2-- Generate Unsupervised Clustering Data and Append Results to distance matrix
 #This is all taken care of via the r script (distance matrix generation, clustering, etc.)
 
-#Output generates a file "tsne_mclust_results.txt"
 &generate_dist_mat_and_cluster;
 my $clusters_with_distance = "mclust_results.txt";
 
@@ -196,7 +195,7 @@ sub read_clusters{
     my %cluster_hash;
     my @sorted_clusters;
     my $cluster_identity;
-    open (my $ch, "<", $cluster_file) or die "Couldn't open $cluster_file\n";
+    open (my $ch, "<", $cluster_file) or die "Couldn't open $cluster_file\n"; #Parse mclust_results.txt
     while(<$ch>){
         my $line = $_;
         chomp $line;
@@ -208,7 +207,7 @@ sub read_clusters{
                 my $genome = $split_line[$i];
                 chomp $genome;
                 if ($genome eq "Cluster"){
-                    $cluster_identity = $i + 1;
+                    $cluster_identity = $i;
                 } elsif ($genome =~ /^Cluster/){
                     $cluster_cols{$genome} = $i + 1;
                     push (@sorted_clusters, $genome);
@@ -224,6 +223,7 @@ sub read_clusters{
                 $out_hash{$genome_row}{$value} = $split_line[$key];
             }
             $out_hash{$genome_row}{"Cluster"} = $split_line[$cluster_identity];
+            #$out_hash{$genome_row}{"Cluster"} = $cluster_identity;
             my $ci_file = $genome_row . "/" . $genome_row . "_cluster_identity.txt"; #Cluster Identity
             open (my $ci, ">", $ci_file) or die "Couldn't open $ci_file";
             #Header of Cluster Identity Columns

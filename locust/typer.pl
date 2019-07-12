@@ -816,12 +816,18 @@ sub create_tree{
 sub strain_approximation{
 	my $ST_type_size = shift;
 	print $lfh "|Step: Generating st approximations.\n";
+<<<<<<< HEAD
 
 	my $cmd = "perl $Bin/cluster_approximation.pl";
+=======
+    if ($opts{input_file}){
+	my $cmd = "perl $Bin/strain_approximation.pl";
+>>>>>>> f463602fe1ea95cefc0a835cc3de107d1eb80690
 	$cmd .= " -i $opts{input_file}";
 	$cmd .= " -s ST_all.out";
 	$cmd .= " -t $ST_type_size";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
+    }
 }
 
 sub median{
