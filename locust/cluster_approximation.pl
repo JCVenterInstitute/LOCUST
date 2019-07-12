@@ -1,4 +1,4 @@
-use warnings;
+#use warnings;
 use strict;
 use Pod::Usage;
 use Data::Dumper;
@@ -77,7 +77,6 @@ my $clusters_with_distance = "mclust_results.txt";
 #write per genome results
 my $main_info = &read_clusters(\@$type_strains, $clusters_with_distance);
 my %main_info = %$main_info;
-
 #Step 4 -- Add info to the ST_all.out file
 # ST_approx.details contains 2 * (Best Hit ID, Best Hit Attribute, Best Hit ST, Best Hit Distance, Best Hit Cluster)
 # Must also add Genome's Cluster Membership
@@ -113,7 +112,7 @@ while(<$st_fh>){
         push (@st_all_approx_header, ("Best Hit", "Second Best Hit"));
         print $ap_fh join("\t", @st_all_approx_header) . "\n";
         push (@st_approx_details_header, @split_line);
-        push (@st_approx_details_header, ("Genome Cluster", "Best Hit ID", "Best Hit Attribute", "Best Hit ST", "Best Hit Distance", "Best Hit Cluster", "Second Best Hit ID", "Second Best Hit Attribute", "Second Best Hit ST", "Second Best Hit Distance", "Second Best Hit Cluster"));
+        push (@st_approx_details_header, ("Genome Cluster", "Genome Cluster Uncertainty", "Best Hit ID", "Best Hit Attribute", "Best Hit ST", "Best Hit Distance", "Best Hit Cluster", "Best Hit Cluster Uncertainty", "Second Best Hit ID", "Second Best Hit Attribute", "Second Best Hit ST", "Second Best Hit Distance", "Second Best Hit Cluster", "Second Best Hit Cluster Uncertainty"));
         print $dt_fh join("\t", @st_approx_details_header) . "\n";
     } else {
         my @st_approx_details_body;
@@ -137,18 +136,21 @@ while(<$st_fh>){
         my @type_strain_clusters = split("\t", $filelines[2]);
         #Current Genome Cluster
         my $genome_cluster = $main_info{$genome}->{"Cluster"};
+        my $genome_uncertainty = $main_info{$genome} ->{"Certainty"};
         #Best Hit
         my $best_hit_id = $type_strains[0];
         my $best_hit_attribute = $attributeHash{$best_hit_id};
         my $best_hit_st = $st_hash{$best_hit_id};
         my $best_hit_distance = $type_strain_distances[0];
         my $best_hit_cluster = $type_strain_clusters[0];
+        my $best_hit_uncertainty = $main_info{$best_hit_id}->{"Certainty"};
         #Second Best Hit
         my $second_best_hit_id = $type_strains[1];
         my $second_best_hit_attribute = $attributeHash{$second_best_hit_id};
         my $second_best_hit_st = $st_hash{$second_best_hit_id};
         my $second_best_hit_distance = $type_strain_distances[1];
         my $second_best_hit_cluster = $type_strain_clusters[1];
+        my $second_best_hit_uncertainty = $main_info{$second_best_hit_id}->{"Certainty"};
         close($bh);
 
         for (my $i=0;$i < $attrib_cols;$i++){
@@ -160,8 +162,8 @@ while(<$st_fh>){
         push(@st_all_approx_body, ($best_hit_attribute, $second_best_hit_attribute));
         print $ap_fh join("\t", @st_all_approx_body) . "\n";
         #ST_approx.details
-        push(@st_approx_details_body, ($genome_cluster, $best_hit_id, $best_hit_attribute, $best_hit_st, $best_hit_distance, $best_hit_cluster));
-        push(@st_approx_details_body, ($second_best_hit_id, $second_best_hit_attribute, $second_best_hit_st, $second_best_hit_distance, $second_best_hit_cluster));
+        push(@st_approx_details_body, ($genome_cluster, $genome_uncertainty, $best_hit_id, $best_hit_attribute, $best_hit_st, $best_hit_distance, $best_hit_cluster, $best_hit_uncertainty));
+        push(@st_approx_details_body, ($second_best_hit_id, $second_best_hit_attribute, $second_best_hit_st, $second_best_hit_distance, $second_best_hit_cluster, $second_best_hit_uncertainty));
         print $dt_fh join("\t", @st_approx_details_body) . "\n";
 
 
@@ -222,7 +224,11 @@ sub read_clusters{
             while ( my ($key, $value) = each (%header_hash)){
                 $out_hash{$genome_row}{$value} = $split_line[$key];
             }
+            my $cluster = "Cluster " . $split_line[$cluster_identity];
+            my $certainty_col = $cluster_cols{$cluster};
             $out_hash{$genome_row}{"Cluster"} = $split_line[$cluster_identity];
+            $out_hash{$genome_row}{"Certainty"} = $split_line[$certainty_col];
+
             #$out_hash{$genome_row}{"Cluster"} = $cluster_identity;
             my $ci_file = $genome_row . "/" . $genome_row . "_cluster_identity.txt"; #Cluster Identity
             open (my $ci, ">", $ci_file) or die "Couldn't open $ci_file";
@@ -247,8 +253,10 @@ sub read_clusters{
             open (my $sd, ">", $sorted_distances_file) or die "Couldn't open $sorted_distances_file";
 
             my $h2 = $out_hash{$genome};
-            my @type_strains_ordered = sort { $h2->{$a} <=> $h2->{$b}} keys %$h2;
+            # Use of uninitialize value in numeric comparison below:
+            my @type_strains_ordered = sort { $h2->{$a} <=> $h2->{$b}} keys $h2;
             @type_strains_ordered = grep { $_ ne "Cluster"} @type_strains_ordered;
+            @type_strains_ordered = grep {$_ ne "Certainty"} @type_strains_ordered;
             my @type_strain_distances = map { $h2->{$_} } @type_strains_ordered;
             my @cluster_membership = map { $out_hash{$_}->{"Cluster"} } @type_strains_ordered;
             print $sd join("\t", @type_strains_ordered) . "\n";
