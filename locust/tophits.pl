@@ -71,10 +71,10 @@ while (<INFILE>) {
 	my($queryAllele,$scheme) = split(/\_/,$qid,2);
 
 	$bitscores{$queryAllele}{$sid} = $bitscore;
-	
+	if (!$multi_copy{$queryAllele}{$sid}) { $multi_copy{$queryAllele}{$sid} = (); }
 	#Store hits above 90% id
 	if($percent >= 90){
-	    $multi_copy{$queryAllele}{$sid} = _trim($line);
+	    push(@{$multi_copy{$queryAllele}{$sid}}, _trim($line)); # = _trim($line);
 
 	    if($multi_flag){
 		$coords{$qid . ":" . $sid}{'start'} = $sstart;
@@ -108,6 +108,10 @@ my @alleles = (keys %coords);
 my $overlap_alleles;
 
 for my $i (0 .. $#alleles) {
+	#print STDERR "$i ", $alleles[$i], "\t", $coords{$alleles[$i]}{'start'}, "\t" ,$coords{$alleles[$i]}{'end'},"\n";
+}
+
+for my $i (0 .. $#alleles) {
     my @values1 = split(":",$alleles[$i]);
     my $allele1 = $alleles[$i];
     my $start1 = $coords{$allele1}{'start'};
@@ -123,7 +127,7 @@ for my $i (0 .. $#alleles) {
 	my $sid2 = $coords{$allele2}{'sid'};
 	my $length2 = ($end2 - $start2) + 1;
 	my $overlap;
-
+	#if (($sid1 eq $sid2) && $values1[0] && $values2[0]) { print STDERR "$i--$j\n"; }
 	if (($sid1 eq $sid2) && ($start2 < $end1) && ($end2 > $start1)) {#different alleles have overlapping matches in the genome
 	    if ($end2 < $end1) {
 		if ($start2 < $start1) {
@@ -138,7 +142,7 @@ for my $i (0 .. $#alleles) {
 		    $overlap = ($end1 - $start2) + 1;
 		}
 	    }
-
+		#print STDERR "$i--$j\n";
 	    if (($overlap >= 0.5 * $length1) || ($overlap >= 0.5 * $length2)) {
 		my($a1,$scheme1) = split(/\_/,$allele1,2);
 		my($a2,$scheme1) = split(/\_/,$allele2,2);
@@ -166,11 +170,11 @@ for my $i (0 .. $#alleles) {
 		    my $a2bit = $coords{$allele2}{'bit'};
 
 		    #Remove overlapping multi copy alleles
-		    if($a1bit > $a2bit){
-			$multi_copy{$a2}{$sid2} = undef if(exists $multi_copy{$a2}{$sid2});
-		    }else{
-			$multi_copy{$a1}{$sid1} = undef if(exists $multi_copy{$a1}{$sid1});
-		    }
+		    #if($a1bit > $a2bit){
+			#$multi_copy{$a2}{$sid2} = undef if(exists $multi_copy{$a2}{$sid2});
+		    #}else{
+			#$multi_copy{$a1}{$sid1} = undef if(exists $multi_copy{$a1}{$sid1});
+		    #}
 
 		}
 	    }
@@ -178,9 +182,20 @@ for my $i (0 .. $#alleles) {
     }
 }
 
+my %coordsn;
 for my $key (keys %hits) {
     my $hit = $hits{$key};
-    print OUTFILE $hit;
+    print STDERR $key,  "--", $hit;
+	print OUTFILE $hit;
+	my @list = split "\t", $hit; my $sid = _trim($list[0]);
+	$coordsn{$key} = () ; $coordsn{$key}[0]->{sstart} = _trim($list[8]);
+			$coordsn{$key}[0]->{send} = _trim($list[9]);
+			if ($coordsn{$key}[0]->{send} < $coordsn{$key}[0]->{sstart}) {
+				my $tmp = $coordsn{$key}[0]->{send};
+				$coordsn{$key}[0]->{send} = $coordsn{$key}[0]->{sstart};
+				$coordsn{$key}[0]->{sstart} = $tmp;
+			}
+			
 }
 
 #Sort through same gene hits above 90%
@@ -191,41 +206,73 @@ my $print_g = 0;
 foreach my $gene(keys %multi_copy){
 
     my $print_a = 0;
-
+	print STDERR "$gene\n";
     #my $number = scalar keys $multi_copy{$gene};
-    my $number = scalar keys $multi_copy{$gene};
+    #my $number = scalar keys $multi_copy{$gene};
     
     #Now loop and print information if there are multi copy
-    if($number > 1){
+    #if($number > 1){
 
 	foreach my $id (keys $multi_copy{$gene}){
-	    
+	    #now I need to check for overlap
+		print STDERR "...$gene.. $id .. ", $multi_copy{$gene}{$id}, " ..\n";
 	    my($a,$sid) = split(":",$id);
-	    
+	    my $hit = "";
 	    if(defined $multi_copy{$gene}{$id}){
-		
-		my $hit = $multi_copy{$gene}{$id};
+			my $c = 1;
+			for (my $i = 0; $i < scalar(@{$multi_copy{$gene}{$id}}); $i++)
+			{
+				my @list = split "\t", $multi_copy{$gene}{$id}[$i];
+				my $sstart = _trim($list[8]);
+				my $send = _trim($list[9]);
+				if ($send < $sstart) {
+					my $tmp = $send;
+					$send = $sstart;
+					$sstart = $tmp;
+				
+				}
+			
+				my $good = 1;
+				for (my $j = 0; $j < scalar(@{$coordsn{$gene}}); $j++)
+				{
+					if (($sstart >= $coordsn{$gene}[$j]->{sstart} && $sstart <= $coordsn{$gene}[$j]->{send}) ||
+					($send >= $coordsn{$gene}[$j]->{sstart} && $send <= $coordsn{$gene}[$j]->{send}))
+					{
+						$good = 0;
+						print STDERR $list[0], "\t$sstart\t$send\n";
+					}
+				}
+				if ($good == 1)
+				{
+					$coordsn{$gene}[$c]->{sstart} = $sstart;
+					$coordsn{$gene}[$c]->{send} = $send;
+					$c++;
+					print STDERR $multi_copy{$gene}{$id}[$i], "\n";
+				
+					$hit .=  $multi_copy{$gene}{$id}[$i] . "\n";
+				}
+			}
 		
 		#print header if necessary
 		print $MULTI_FILE_FH "#Genome: $genome\n" unless $print_g;
 		print $MULTI_FILE_FH "#Allele: $gene\n" unless $print_a;
 
 		#Flags to avoid printing headers
-		$print_a=1;
+		$print_a=1; 
 		$print_g=1;
 		
 		#print hit
-		print $MULTI_FILE_FH "$hit\n";
+		if ($hit) { print $MULTI_FILE_FH "$hit\n"; }
 		
 		# IF FLAG PRINT TO HITS FILE
 		# Don't print the hit that was the top hit as that was
 		# already printed
-		if($multi_flag){
+		if($multi_flag && $hit){
 		    print OUTFILE "$hit\n" unless (_trim($hits{$gene}) eq $hit);
 		}
 	    }
 	}
-    }
+    #}
 }
 
 close (INFILE);

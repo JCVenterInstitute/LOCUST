@@ -39,7 +39,7 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --biosample_list
                          --accession_list
                          --genome_type <cg/wgs>
-                         --max_contigs
+                         --max_contigscd
                          --min_N50
                          --previous_output
                          --original_input_file
@@ -816,13 +816,8 @@ sub create_tree{
 sub strain_approximation{
 	my $ST_type_size = shift;
 	print $lfh "|Step: Generating st approximations.\n";
-<<<<<<< HEAD
-
-	my $cmd = "perl $Bin/cluster_approximation.pl";
-=======
     if ($opts{input_file}){
 	my $cmd = "perl $Bin/strain_approximation.pl";
->>>>>>> f463602fe1ea95cefc0a835cc3de107d1eb80690
 	$cmd .= " -i $opts{input_file}";
 	$cmd .= " -s ST_all.out";
 	$cmd .= " -t $ST_type_size";
@@ -2299,7 +2294,6 @@ sub run_st_finder{
 	foreach my $unique(keys %{$allelesFound{$allele}}){
 
 	    my $label = $allelesFound{$allele}{$unique};
-
 	    #Adds Ambig Flag
 	    if(exists $ambig_alleles->{$unique}){
 		$allelesFound{$allele}{$unique} = "AMBIG";
@@ -2309,8 +2303,8 @@ sub run_st_finder{
 
 		if(exists $labels->{$label}){
 
-		    $allelesFound{$allele}{$unique} = $label . "_MC";
-
+			$allelesFound{$allele}{$unique} = $label . "_MC";
+			
 		    my $orig_label = $labels->{$label};
 		    $allelesFound{$allele}{$orig_label} = $label . "_MC";
 
@@ -2824,26 +2818,59 @@ sub _cat {
 	if(-s $file){
 
 	    my $ifh = path($file)->filehandle("<");
-
-	    while ( <$ifh> ) {
+		my @lines;
+	    my $header;
+		while ( <$ifh> ) {
 
 		my $line = $_;
 
 		if($line =~ /^Sample/){
 
 		    print $output_fh $line unless($print_header);
-		    $print_header = 1;
+		    if (!$header) { $header = $line; }
+			$print_header = 1;
 
 		}else{
-
-		    print $output_fh $line;
-
+			#account for multiple lines
+		    #print $output_fh $line;
+			push @lines, $line;
 		}
 	    }
-
+		if (scalar(@lines) == 1) { print $output_fh $lines[0];}
+		else{
+			my @header = split "\t", $header;
+			my @out = ();
+			for (my $i = 0; $i < scalar(@header); $i++){ $out[$i] = (); }
+			my @hits; 
+			foreach my $line (@lines) {
+				$line =~ /([^\n\r]+)/; my @items = split "\t", $1;
+				for (my $i = 0; $i < scalar(@items); $i++){
+					if (!$hits[$i]->{$items[$i]}) {
+						$hits[$i]->{$items[$i]} = 1; push(@{$out[$i]}, $items[$i]);
+					}
+				}
+			}
+			my @order = (0..(scalar(@{$out[1]})-1));
+			if (scalar(@order) > 1)
+			{
+				@order = sort {(($out[1]->[$a] =~ /(\d+)/)[0] || 10000) <=> (($out[1]->[$b]=~ /(\d+)/)[0] || 10000)} @order;
+			}
+			my $out_string = "";
+			if (@out) {  foreach my $item (@out) { 
+				
+				if ($item && scalar(@$item) > 1) { 
+					for (my $i = 0; $i < scalar(@order); $i++) { $out_string .= $item->[$order[$i]] . "/"; }
+				chop($out_string);
+				}
+				else { if ($item) { $out_string .= $item->[0]; } }
+				$out_string .= "\t";
+			} }
+			$out_string =~ s/\t\Z//;;
+			print $output_fh $out_string, "\n";
+			
+		}
 	}
-
-    }
+	}
 
 }
 
