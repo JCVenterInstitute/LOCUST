@@ -108,7 +108,6 @@ my @alleles = (keys %coords);
 my $overlap_alleles;
 
 for my $i (0 .. $#alleles) {
-	#print STDERR "$i ", $alleles[$i], "\t", $coords{$alleles[$i]}{'start'}, "\t" ,$coords{$alleles[$i]}{'end'},"\n";
 }
 
 for my $i (0 .. $#alleles) {
@@ -127,7 +126,6 @@ for my $i (0 .. $#alleles) {
 	my $sid2 = $coords{$allele2}{'sid'};
 	my $length2 = ($end2 - $start2) + 1;
 	my $overlap;
-	#if (($sid1 eq $sid2) && $values1[0] && $values2[0]) { print STDERR "$i--$j\n"; }
 	if (($sid1 eq $sid2) && ($start2 < $end1) && ($end2 > $start1)) {#different alleles have overlapping matches in the genome
 	    if ($end2 < $end1) {
 		if ($start2 < $start1) {
@@ -142,7 +140,6 @@ for my $i (0 .. $#alleles) {
 		    $overlap = ($end1 - $start2) + 1;
 		}
 	    }
-		#print STDERR "$i--$j\n";
 	    if (($overlap >= 0.5 * $length1) || ($overlap >= 0.5 * $length2)) {
 		my($a1,$scheme1) = split(/\_/,$allele1,2);
 		my($a2,$scheme1) = split(/\_/,$allele2,2);
@@ -185,11 +182,12 @@ for my $i (0 .. $#alleles) {
 my %coordsn;
 for my $key (keys %hits) {
     my $hit = $hits{$key};
-    print STDERR $key,  "--", $hit;
 	print OUTFILE $hit;
-	my @list = split "\t", $hit; my $sid = _trim($list[0]);
+	my @list = split "\t", $hit; my $sid = _trim($list[1]);
 	$coordsn{$key} = () ; $coordsn{$key}[0]->{sstart} = _trim($list[8]);
 			$coordsn{$key}[0]->{send} = _trim($list[9]);
+			$coordsn{$key}[0]->{sid} = _trim($list[1]);
+			
 			if ($coordsn{$key}[0]->{send} < $coordsn{$key}[0]->{sstart}) {
 				my $tmp = $coordsn{$key}[0]->{send};
 				$coordsn{$key}[0]->{send} = $coordsn{$key}[0]->{sstart};
@@ -206,7 +204,6 @@ my $print_g = 0;
 foreach my $gene(keys %multi_copy){
 
     my $print_a = 0;
-	print STDERR "$gene\n";
     #my $number = scalar keys $multi_copy{$gene};
     #my $number = scalar keys $multi_copy{$gene};
     
@@ -215,39 +212,36 @@ foreach my $gene(keys %multi_copy){
 
 	foreach my $id (keys $multi_copy{$gene}){
 	    #now I need to check for overlap
-		print STDERR "...$gene.. $id .. ", $multi_copy{$gene}{$id}, " ..\n";
-	    my($a,$sid) = split(":",$id);
+	    my($a,$ssid) = split(":",$id);
 	    my $hit = "";
 	    if(defined $multi_copy{$gene}{$id}){
 			my $c = 1;
-			for (my $i = 0; $i < scalar(@{$multi_copy{$gene}{$id}}); $i++)
-			{
+			for my $i (0 .. (scalar(@{$multi_copy{$gene}{$id}})-1))	{
 				my @list = split "\t", $multi_copy{$gene}{$id}[$i];
 				my $sstart = _trim($list[8]);
 				my $send = _trim($list[9]);
+				my $sid = _trim($list[1]);
 				if ($send < $sstart) {
-					my $tmp = $send;
-					$send = $sstart;
-					$sstart = $tmp;
+					my $tmp = $send; $send = $sstart; $sstart = $tmp;
 				
 				}
 			
 				my $good = 1;
-				for (my $j = 0; $j < scalar(@{$coordsn{$gene}}); $j++)
-				{
-					if (($sstart >= $coordsn{$gene}[$j]->{sstart} && $sstart <= $coordsn{$gene}[$j]->{send}) ||
+				for my $j (0 .. ( scalar(@{$coordsn{$gene}})-1)) {
+					if ($sid eq $coordsn{$gene}[$j]->{sid} && ($sstart >= $coordsn{$gene}[$j]->{sstart} && $sstart <= $coordsn{$gene}[$j]->{send}) ||
 					($send >= $coordsn{$gene}[$j]->{sstart} && $send <= $coordsn{$gene}[$j]->{send}))
 					{
 						$good = 0;
-						print STDERR $list[0], "\t$sstart\t$send\n";
 					}
 				}
-				if ($good == 1)
+				if ($good)
 				{
+					#Adding to list
 					$coordsn{$gene}[$c]->{sstart} = $sstart;
 					$coordsn{$gene}[$c]->{send} = $send;
+					$coordsn{$gene}[$c]->{sid} = $sid;
+					
 					$c++;
-					print STDERR $multi_copy{$gene}{$id}[$i], "\n";
 				
 					$hit .=  $multi_copy{$gene}{$id}[$i] . "\n";
 				}

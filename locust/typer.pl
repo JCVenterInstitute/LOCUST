@@ -48,7 +48,7 @@ typer.pl -  A Custom Sequence Locus Typer for Classifying Microbial Genotypic an
                          --hmm_cutoff
                          --gb_list
                          --input_path
-                         --multi_copy
+                         --single_copy
                          --skip_itol
                          --itol_text
                          --skip_translation
@@ -110,7 +110,7 @@ B<--gb_list>         : List of gb file locations <genome><tab><gb location>
 
 B<--input_path>      : Point to directory of fasta files
 
-B<--multi_copy>      : Flag to pull multi copy genes
+B<--single_copy>      : Flag to pull only one copy per gene
 
 B<--skip_itol>	     : Skips making the itol annotation file
 
@@ -202,7 +202,7 @@ GetOptions( \%opts, 'input_file|i=s',
 	    'hmm_cutoff=i',
 	    'gb_list=s',
 	    'input_path=s',
-	    'multi_copy',
+	    'single_copy',
 	    'skip_itol',
 	    "itol_text",
 	    "skip_translation",
@@ -328,8 +328,9 @@ unless($opts{novel_schema}){
     print $lfh "|Step: Combine all genome type files into one\n";
     #Cat all st_files into one
 
-    &_cat($sth,$st_files);
-    &_cat($nth,$fa_files);
+    &_cat($sth,$st_files, 1);
+	print STDERR "running fa\n";
+    &_cat_fa_files($nth,$fa_files);
 
     close $sth;
     close $nth;
@@ -359,7 +360,7 @@ if($opts{append_schema}){
     push(@aa_files,$nr_file);
     push(@aa_files, $opts{alleles});
 
-    &_cat($cfh,\@aa_files); #make one large combined allele file
+    &_cat($cfh,\@aa_files, 1); #make one large combined allele file
 
     #clean combined fasta file
     my $cmd = "$CLEAN_FASTA $combined_alleles";
@@ -377,7 +378,7 @@ if($opts{append_schema}){
     #Cat all new ST files together
     my $new_st_file = "$append_outdir/tmp_allele_ST.out";
     my $nst = path($new_st_file)->filehandle(">");
-    &_cat($nst,$nst_files);
+    &_cat($nst,$nst_files, 0);
     close $nst;
 
     #Add new ST types to $opts{mlst_scheme}
@@ -680,7 +681,7 @@ sub download_from_ncbi{
     #Cat all fasta list files together in one file
     my $output_file = "$OUTPUT/combined.list";
     my $fh = path($output_file)->filehandle(">");
-    &_cat($fh,\@fasta_files);
+    &_cat_fa_files($fh,\@fasta_files);
     $fh = "";
 
     my $gb_list = "$OUTPUT/combined_gb.list";
@@ -819,7 +820,7 @@ sub strain_approximation{
     if ($opts{input_file}){
 	my $cmd = "perl $Bin/strain_approximation.pl";
 	$cmd .= " -i $opts{input_file}";
-	$cmd .= " -s ST_all.out";
+	$cmd .= " -s $OUTPUT/ST_all.out";
 	$cmd .= " -t $ST_type_size";
 	system($cmd) == 0 || die("ERROR: $cmd failed");
     }
@@ -1418,7 +1419,7 @@ sub create_novel_files{
 		    $genome_st->{$genome}->{$allele}->{$unique} = "AMBIG";
 		}
 
-		if($count_alleles > 1 && $opts{multi_copy}) { #means multi_copy
+		if($count_alleles > 1 && !$opts{single_copy}) { #means multi_copy
 
 		    if(exists $labels->{$label}){
 
@@ -1704,7 +1705,7 @@ sub make_new_schema{
 
     #Parses new ST types and stores in hash
     open(my $new_st_fh, "<", $new_st_file);
-
+	print STDERR "file: $new_st_file\n";
     while(<$new_st_fh>){
 
 	unless($_ =~ /Sample/){
@@ -1713,9 +1714,8 @@ sub make_new_schema{
 
 	    my @values = split(/\t/,$_);
 	    (my $sample, my $st_num) = splice(@values,0,2);
-	    my $st_type = join("\t",@values[0 .. ($ST_type_size - 1)]);
-
-	    if ($st_num eq "UNKNOWN") {
+		my $st_type = join("\t", @values[0 .. ($ST_type_size - 1)]);
+		if ($st_num eq "UNKNOWN") {
 
 		my $skip_bad = 0;
 
@@ -2435,7 +2435,8 @@ sub run_st_finder{
     my $exclude_genome; #Stores genomes with missing or short alleles to exclude in tree builder
 
    # If the stKey exists in stMap, print both ST found and stKey to output file.
-    foreach my $stKey (keys %$unique_variants){
+    my %stOut;
+	foreach my $stKey (keys %$unique_variants){
 
 	my $ST;
 
@@ -2456,21 +2457,30 @@ sub run_st_finder{
 	}
 
 
-	print $output_fh "$identifier\t$ST\t$stKey";
+	$stOut{$ST} = "$identifier\t$ST\t$stKey";
 
 	$exclude_genome = $identifier if($stKey =~ /(MISSING|SHORT|5'PRTL|3'PRTL|PSEUDO)/);
 
 	if (keys %{ $stAttributes }) {
-	    print $output_fh "\t$stAttributes->{$ST}";
+	   $stOut{$ST} .= "\t$stAttributes->{$ST}";
 	}
 
 	if ($genomeAttributes) {
-	    print $output_fh "\t$genomeAttributes";
+	    $stOut{$ST} .= "\t$genomeAttributes";
 	}
-
-	print $output_fh "\n";
+	$stOut{$ST} .= "\n";
+	#print $output_fh "\n";
     }
-
+	my @order = keys(%stOut);
+	if (scalar(@order) > 1)
+	{
+		@order = sort {(($a =~ /(\d+)/)[0] || 1000000) <=> (($b=~ /(\d+)/)[0] || 1000000)} @order;
+	}
+	foreach my $stLines (@order)
+	{
+		print $output_fh $stOut{$stLines};
+	}
+	
     return($outputfile,$new_alleles_file,$exclude_genome);
 }
 sub grow_variants {
@@ -2523,11 +2533,11 @@ sub run_top_hits{
     my $cmd = "perl $Bin/tophits.pl";
     $cmd .= " $blast";
     $cmd .= " $multi_file";
-    $cmd .= " multi" if $opts{multi_copy};
+    $cmd .= " multi" if !$opts{single_copy};
 
     #skips running the top hits if file already
     #exists and the option --skip_blast is set
-
+	
     unless(-s $file && $opts{skip_blast} || $new_alleles){
 	print $lfh "Running: $cmd\n";
 
@@ -2808,7 +2818,7 @@ sub _cat {
     # Given a list of file names, concatonate the first through n minus one-th
     # onto the nth.
 
-    my ( $output_fh, $input ) = ( @_ );
+    my ( $output_fh, $input, $combine ) = ( @_ );
     my $print_header = 0;
 
     for ( @$input ) {
@@ -2836,36 +2846,43 @@ sub _cat {
 			push @lines, $line;
 		}
 	    }
+		print STDERR "$file ", scalar(@lines), "\n";
 		if (scalar(@lines) == 1) { print $output_fh $lines[0];}
 		else{
-			my @header = split "\t", $header;
-			my @out = ();
-			for (my $i = 0; $i < scalar(@header); $i++){ $out[$i] = (); }
-			my @hits; 
-			foreach my $line (@lines) {
-				$line =~ /([^\n\r]+)/; my @items = split "\t", $1;
-				for (my $i = 0; $i < scalar(@items); $i++){
-					if (!$hits[$i]->{$items[$i]}) {
-						$hits[$i]->{$items[$i]} = 1; push(@{$out[$i]}, $items[$i]);
+
+			my $out_string = "";
+			if ($header && $combine) {
+				my @out = ();
+				my @header = split "\t", $header;
+				for my $i (0 .. $#header)
+				{ $out[$i] = (); }
+			
+				my @hits; 
+				foreach my $line (@lines) {
+					$line =~ /([^\n\r]+)/; my @items = split "\t", $1;
+					for my $i (0 .. $#items) {
+						if (!$hits[$i]->{$items[$i]}) {
+							$hits[$i]->{$items[$i]} = 1; push(@{$out[$i]}, $items[$i]);
+						}
 					}
 				}
-			}
-			my @order = (0..(scalar(@{$out[1]})-1));
-			if (scalar(@order) > 1)
-			{
-				@order = sort {(($out[1]->[$a] =~ /(\d+)/)[0] || 10000) <=> (($out[1]->[$b]=~ /(\d+)/)[0] || 10000)} @order;
-			}
-			my $out_string = "";
-			if (@out) {  foreach my $item (@out) { 
-				
-				if ($item && scalar(@$item) > 1) { 
-					for (my $i = 0; $i < scalar(@order); $i++) { $out_string .= $item->[$order[$i]] . "/"; }
-				chop($out_string);
+				my @order = (0..(scalar(@{$out[1]})-1));
+				if (scalar(@order) > 1)
+				{
+					@order = sort {(($out[1]->[$a] =~ /(\d+)/)[0] || 1000000) <=> (($out[1]->[$b]=~ /(\d+)/)[0] || 1000000)} @order;
 				}
-				else { if ($item) { $out_string .= $item->[0]; } }
-				$out_string .= "\t";
-			} }
-			$out_string =~ s/\t\Z//;;
+				if (@out) {  foreach my $item (@out) { 
+					
+					if ($item && scalar(@$item) > 1) { 
+						for (my $i = 0; $i < scalar(@order); $i++) { $out_string .= $item->[$order[$i]] . "/"; }
+						chop($out_string);
+					}
+					else { if ($item) { $out_string .= $item->[0]; } }
+					$out_string .= "\t";
+				} }
+				$out_string =~ s/\t\Z//;
+			}
+			else { foreach my $line (@lines) { $out_string .= $line; } $out_string =~ s/\n\Z//;}
 			print $output_fh $out_string, "\n";
 			
 		}
