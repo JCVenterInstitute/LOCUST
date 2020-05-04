@@ -84,7 +84,7 @@ while (<$th>){
 	}
 }
 if ($type_strains < 2){
-	print "ERROR: There are too few defined type strains from the input. Can't approximate type strain.\n";
+	print "Skipping strain approximation as too few defined type strains from the input...\n";
 } else {
 #Run muscle to create aligned
 my $aligned_file = "allGenomesJoinedAlleles.fasta";
