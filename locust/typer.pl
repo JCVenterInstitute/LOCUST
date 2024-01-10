@@ -970,13 +970,13 @@ file.nsq");
 	@med_array = ();# clear temporary storage to compute median
 	$index = 0;
 	#print STDERR "Bad strand counts for $gene:";
-	foreach my $count (values $bad_strand{$gene}){
+	foreach my $count (values %{$bad_strand{$gene}}){
 	    $med_array[$index++] = $count;
 	    #print STDERR "\t$count";
 	}
 	my $bad_strand_median_cut = (2 * median(@med_array)) + 1;
 	#print STDERR "\ncutoff: $bad_strand_median_cut\n";
-	foreach my $allele (keys $bad_strand{$gene}){
+	foreach my $allele (keys %{$bad_strand{$gene}}){
 	    #print STDERR "$allele: $bad_strand{$gene}{$allele}\n";
 	    if (($bad_strand{$gene}{$allele} > $bad_strand_median_cut) && ($bad_strand{$gene}{$allele} > $redund_allele_cnt{$allele})) {
 		push(@bad_allele,$allele);
@@ -988,13 +988,13 @@ file.nsq");
 	@med_array = ();# clear temporary storage to compute median
 	$index = 0;
 	#print STDERR "Bad trim counts for $gene";
-	foreach my $count (values $bad_align{$gene}){
+	foreach my $count (values %{$bad_align{$gene}}){
 	    $med_array[$index++] = $count;
 	    #print STDERR "\t$count";
 	}
 	my $bad_align_median_cut = (2 * median(@med_array)) + 1;
 	#print STDERR "\ncutoff: $bad_align_median_cut\n";
- 	foreach my $allele (keys $bad_align{$gene}){
+ 	foreach my $allele (keys %{$bad_align{$gene}}){
 	    #print STDERR "$allele: $bad_align{$gene}{$allele}\n";
 	    if (($bad_align{$gene}{$allele} > $bad_align_median_cut) && ($bad_align{$gene}{$allele} > $redund_allele_cnt{$allele})) {
 		push(@bad_allele,$allele);
@@ -1010,7 +1010,7 @@ file.nsq");
 	@bad_allele = (); #reset array
 	foreach my $allele (keys %redund_allele_cnt){# check for consistency of bad alleles
 	    if (defined $redund_graph{$allele}){
-		foreach my $redund (keys $redund_graph{$allele}){
+		foreach my $redund (keys %{$redund_graph{$allele}}){
 		    if (!defined $redund_allele_cnt{$redund}){
 			print STDERR "WARNING: $redund was determined to be bad but was redundant with $allele which was determined to be good which is a conflict! Not using as a seed.\n";
 			#remove this allele as well
@@ -1029,7 +1029,7 @@ file.nsq");
 	    last;#All remaining subsets have been completely covered
 	}
 	if (defined $redund_graph{$allele}) {
-	    foreach my $redund (keys $redund_graph{$allele}){# Reduce allele counts for intersecting subsets
+	    foreach my $redund (keys %{$redund_graph{$allele}}){# Reduce allele counts for intersecting subsets
 		if(!$covered_allele{$redund}) {
 		    $covered_allele{$redund} = 1;# Mark as covered
 		    if(!$covered_allele{$allele}) {
@@ -1038,7 +1038,7 @@ file.nsq");
 			$redund_allele_cnt{$redund}--;
 		    }
 		    #print STDERR "redund: $redund count: $redund_allele_cnt{$redund} $covered_allele{$redund}\n";
-		    foreach my $covered (keys $redund_graph{$redund}){
+		    foreach my $covered (keys %{$redund_graph{$redund}}){
 			$redund_allele_cnt{$covered}--;
 			#print STDERR "covered: $covered count: $redund_allele_cnt{$covered} $covered_allele{$covered}\n";
 		    }
@@ -1513,7 +1513,7 @@ sub print_novel_schema{
 	    my @v;
 
 	    if(exists $genome_st->{$genome}->{$allele}){
-		@v = keys $genome_st->{$genome}->{$allele};
+		@v = keys %{$genome_st->{$genome}->{$allele}};
 	    }else{
 		$genome_st->{$genome}->{$allele}->{'1'} = "MISSING";
 	    }
@@ -1600,7 +1600,7 @@ sub print_novel_schema{
     #Print ST
     foreach my $genome(keys %$genome_print){
 
-	foreach my $v (keys $genome_print->{$genome}){
+	foreach my $v (keys %{$genome_print->{$genome}}){
 	    print $st_fh $genome . "\t";
 
 	    if($v =~ /(MISSING|SHORT|PSEUDO|PRTL)/){
@@ -2187,7 +2187,7 @@ sub init_st_finder{
 
     #perform sanity checking
     foreach my $allele (keys %{$alleles_seen_ST}) {
-	foreach my $id (keys $alleles_seen_ST->{$allele}) {
+	foreach my $id (keys %{$alleles_seen_ST->{$allele}}) {
 	    if (!defined $alleles_seen_alleles->{$allele}{$id}) {
 				print STDERR "WARNING: Allele $allele\_$id is in $scheme_file but not in $alleles_file.\n";
 	    }
@@ -2196,7 +2196,7 @@ sub init_st_finder{
 
     if (!$append) {
 	foreach my $allele (keys %{$alleles_seen_alleles}) {
-	    foreach my $id (keys $alleles_seen_alleles->{$allele}) {
+	    foreach my $id (keys %{$alleles_seen_alleles->{$allele}}) {
 		if (!defined $alleles_seen_ST->{$allele}{$id}) {
 		    print STDERR "WARNING: Allele $allele\_$id is in $alleles_file but not in $scheme_file.\n";
 		}
@@ -2268,7 +2268,7 @@ sub run_st_finder{
 	} elsif (defined $alleleMap->{lc($querySeq)}->{$queryAllele}) {
 
 	    #Note: Different alleles COULD have the same sequence
-	    foreach my $mlstAlleleName(keys $alleleMap->{lc($querySeq)}){
+	    foreach my $mlstAlleleName(keys %{$alleleMap->{lc($querySeq)}}){
 
 		#If the query allele is a member of the MLST allele
 		#(i.e. the query allele name forms the beginning of the MLST allele name),
@@ -2336,7 +2336,7 @@ sub run_st_finder{
 	my @v;
 
 	if(exists $allelesFound{$key}){
-	    @v = keys $allelesFound{$key};
+	    @v = keys %{$allelesFound{$key}};
 	}else{
 	    $allelesFound{$key}{$key} = "MISSING";
 	}
@@ -2405,7 +2405,7 @@ sub run_st_finder{
 	#Print new allele sequences to fasta file
 	if(exists $allelesFound{$allele}){
 
-	    foreach my $a(keys $allelesFound{$allele}){
+	    foreach my $a(keys %{$allelesFound{$allele}}){
 
 		if($allelesFound{$allele}{$a} =~ /NEW/){
 
