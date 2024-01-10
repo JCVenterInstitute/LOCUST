@@ -373,7 +373,7 @@ if($opts{append_schema}){
 
     #Run seq type with new alleles
     print $lfh "|Step: Run seq typer on new alleles\n";
-    my($nst_files,$nfa_files,$_,$ST_type_size,$ST_attr_size) = run_seq_type($input_file,$combined_alleles);
+    my($nst_files,$nfa_files,$top_seqs_files,$ST_type_size,$ST_attr_size) = run_seq_type($input_file,$combined_alleles);
 
     #Cat all new ST files together
     my $new_st_file = "$append_outdir/tmp_allele_ST.out";
